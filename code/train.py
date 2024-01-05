@@ -71,7 +71,7 @@ def train():
   MODEL_NAME = "team-lucid/deberta-v3-base-korean"
   tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
-  train_dataset = load_data("../../dataset/train/train.csv")
+  train_dataset = load_data("../data/train.csv")
   train_label = label_to_num(train_dataset['label'].values)
 
   train_X, dev_X, train_Y, dev_Y = train_test_split(train_dataset, train_label, test_size=0.1)
