@@ -12,16 +12,6 @@ class Model(nn.Module):
         self.loss = nn.CrossEntropyLoss()
         self.save_pretrained = self.plm.save_pretrained
 
-    def training_step(self, batch):
-        input_ids = batch['input_ids']
-        attention_mask = batch['attention_mask']
-        token_type_ids = batch['token_type_ids']
-        labels = batch['labels']
-
-        outputs = self.plm(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, labels=labels)
-        loss = outputs.loss
-        return loss
-
     def forward(self, input_ids, attention_mask, token_type_ids, labels=None):
         outputs = self.plm(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         if labels is not None:
