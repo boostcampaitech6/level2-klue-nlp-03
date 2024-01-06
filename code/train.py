@@ -10,6 +10,7 @@ from transformers import AutoTokenizer, AutoConfig, AutoModelForSequenceClassifi
 from load_data import *
 from model import Model
 from random import *
+from error_analysis import *
 
 
 def klue_re_micro_f1(preds, labels):
@@ -44,6 +45,9 @@ def klue_re_auprc(probs, labels):
 
 def compute_metrics(pred):
   """ validation을 위한 metrics function """
+  print("------------------compute_metrics------------------")
+  error_analysis(pred)
+  print("---------------------------------------------------")
   logits, labels = pred
   preds = logits.argmax(-1)
   probs = logits
@@ -67,6 +71,15 @@ def label_to_num(label):
   
   return num_label
 
+def num_to_label(num_label):
+  label = []
+  with open('dict_num_to_label.pkl', 'rb') as f:
+    dict_num_to_label = pickle.load(f)
+  for v in num_label:
+    label.append(dict_num_to_label[v])
+
+  return label
+
 def train():
   MODEL_NAME = "team-lucid/deberta-v3-base-korean"
   tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -89,17 +102,17 @@ def train():
   training_args = TrainingArguments(
     output_dir='./results',
     save_total_limit=1,
-    save_steps=1500,
-    num_train_epochs=1,
+    save_steps=500,
+    num_train_epochs=5,
     learning_rate=5e-5,
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
     warmup_steps=500,
     weight_decay=0.01,
     logging_dir='./logs',
-    logging_steps= 1500,
+    logging_steps= 500,
     evaluation_strategy='steps',
-    eval_steps = 1500,
+    eval_steps = 500,
     load_best_model_at_end = True,
   )
   trainer = Trainer(
