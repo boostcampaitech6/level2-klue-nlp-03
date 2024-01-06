@@ -170,10 +170,11 @@ cython_debug/
 *DS_Store
 
 # custom
-**/dataset
 **/.ipynb_checkpoints
 **/lightning_logs
-**/wandb
+code/wandb/*
+code/images/*
+code/prediction/*
 *.ckpt
 *.pt
-*.csv
+**.csv
