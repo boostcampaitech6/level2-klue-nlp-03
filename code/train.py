@@ -45,9 +45,7 @@ def klue_re_auprc(probs, labels):
 
 def compute_metrics(pred):
   """ validation을 위한 metrics function """
-  print("------------------compute_metrics------------------")
   error_analysis(pred)
-  print("---------------------------------------------------")
   logits, labels = pred
   preds = logits.argmax(-1)
   probs = logits
