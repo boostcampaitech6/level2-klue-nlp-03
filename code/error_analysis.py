@@ -5,7 +5,7 @@ import numpy as np
 def error_analysis(pred):
     logits, labels = pred
     pred_labels = np.argmax(logits, axis=1)
-    matrix = confusion_matrix(labels, pred_labels, normalize='true')
+    matrix = confusion_matrix(labels, pred_labels)
     print("")
     plot_confusion_matrix(matrix)
 

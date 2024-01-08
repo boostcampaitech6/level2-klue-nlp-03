@@ -46,12 +46,9 @@ def inference(model, tokenized_sent, device):
   output_pred = []
   output_prob = []
   for i, data in enumerate(tqdm(dataloader)):
+    inputs = {key: val.to(device) for key, val in data.items() if key!= 'labels'}
     with torch.no_grad():
-      outputs = model(
-          input_ids=data['input_ids'].to(device),
-          attention_mask=data['attention_mask'].to(device),
-          token_type_ids=data['token_type_ids'].to(device)
-          )
+      outputs = model(**inputs)
     logits = outputs[0]
     prob = F.softmax(logits, dim=-1).detach().cpu().numpy()
     logits = logits.detach().cpu().numpy()
@@ -100,7 +97,7 @@ def main(args):
   device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
   # load tokenizer
   # Tokenizer_NAME = "klue/bert-base"
-  Tokenizer_NAME = "team-lucid/deberta-v3-base-korean"
+  Tokenizer_NAME = "klue/roberta-small"
   tokenizer = AutoTokenizer.from_pretrained(Tokenizer_NAME)
 
   ## load my model
