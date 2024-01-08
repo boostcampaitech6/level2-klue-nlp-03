@@ -31,6 +31,13 @@ def preprocessing_dataset(dataset):
   out_dataset = pd.DataFrame({'id':dataset['id'], 'sentence':dataset['sentence'],'subject_entity':subject_entity,'object_entity':object_entity,'label':dataset['label'],})
   return out_dataset
 
+def load_demo_data(sentence, subject_entity, object_entity):
+  """ csv 파일을 경로에 맡게 불러 옵니다. """
+  demo_dataset = pd.DataFrame({'id':0, 'sentence':sentence,'subject_entity':subject_entity,'object_entity':object_entity,'label':100}, index=[0])
+  
+  return demo_dataset
+
+
 def load_data(dataset_dir):
   """ csv 파일을 경로에 맡게 불러 옵니다. """
   pd_dataset = pd.read_csv(dataset_dir)
