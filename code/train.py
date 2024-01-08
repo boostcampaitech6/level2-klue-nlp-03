@@ -85,10 +85,13 @@ def train():
   train_dataset = load_data("../data/train.csv")
   train_label = label_to_num(train_dataset['label'].values)
 
+  dev_dataset = load_data("../data/dev.csv")
+  dev_label = label_to_num(dev_dataset['label'].values)
+
   train_X, dev_X, train_Y, dev_Y = train_test_split(train_dataset, train_label, test_size=0.1)
 
-  tokenized_train = tokenized_dataset(train_X, tokenizer)
-  tokenized_dev = tokenized_dataset(dev_X, tokenizer)
+  tokenized_train = tokenized_dataset(train_dataset, tokenizer)
+  tokenized_dev = tokenized_dataset(dev_dataset, tokenizer)
 
   RE_train_dataset = RE_Dataset(tokenized_train, train_Y)
   RE_dev_dataset = RE_Dataset(tokenized_dev, dev_Y)
