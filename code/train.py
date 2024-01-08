@@ -79,7 +79,7 @@ def num_to_label(num_label):
   return label
 
 def train():
-  MODEL_NAME = "team-lucid/deberta-v3-base-korean"
+  MODEL_NAME = "monologg/distilkobert"
   tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
   train_dataset = load_data("../data/train.csv")
