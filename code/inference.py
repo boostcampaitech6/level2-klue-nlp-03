@@ -63,7 +63,7 @@ def main(args):
   device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
   # load tokenizer
   # Tokenizer_NAME = "klue/bert-base"
-  Tokenizer_NAME = "monologg/distilkobert"
+  Tokenizer_NAME = "klue/roberta-small"
   tokenizer = AutoTokenizer.from_pretrained(Tokenizer_NAME)
 
   ## load my model
