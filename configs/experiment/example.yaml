@@ -25,17 +25,16 @@ test: True # Test 진행 여부. 'True'이면 train, validation 외에 추가적
 trainer:
   min_epochs: 10
   max_epochs: 10
-  gradient_clip_val: 0.5
 
 model:
   net:
     model_name: "klue/bert-base"
   loss_fn:
     _target_: torch.nn.CrossEntropyLoss # 원하는 Loss function으로 변경 가능합니다.
-    label_smoothing: 0.0
+
   optimizer:
     _target_: torch.optim.AdamW # 원하는 Optimizer로 변경 가능합니다.
-    lr: 0.001
+    lr: 3e-5
   scheduler:
     _target_: torch.optim.lr_scheduler.ReduceLROnPlateau # 원하는 lr_scheduler로 변경 가능합니다.
     mode: min
