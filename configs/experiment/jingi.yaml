@@ -16,9 +16,9 @@ defaults:
 # 실험마다 우리 바꿔줄 것
 # train과 inference 단계에서 동일하게 사용 가능합니다.
 
-tags: ["이름", "klue/bert-base"] # 실험마다 꼭 작성 부탁드려요
+tags: ["진기", "klue/roberta-base"] # 실험마다 꼭 작성 부탁드려요
 
-seed: 42
+seed: 7024
 
 test: True # Test 진행 여부. 'True'이면 train, validation 외에 추가적으로 test를 진행합니다.
 
@@ -29,7 +29,7 @@ trainer:
 
 model:
   net:
-    model_name: "klue/bert-base"
+    model_name: "klue/roberta-base"
   loss_fn:
     _target_: torch.nn.CrossEntropyLoss # 원하는 Loss function으로 변경 가능합니다.
     label_smoothing: 0.0

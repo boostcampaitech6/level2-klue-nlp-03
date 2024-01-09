@@ -150,6 +150,9 @@ dmypy.json
 
 # Lightning-Hydra-Template
 configs/local/default.yaml
+configs/experiment/*.yaml
+!configs/experiment/example.yaml
+!configs/experiment/jingi.yaml
 /logs/
 .env
 
