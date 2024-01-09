@@ -1,0 +1,56 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: klue
+  - override /model: klue
+  - override /callbacks: default
+  - override /trainer: default
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+# --------------------------------------------------------------------------------------------
+
+# 실험마다 우리 바꿔줄 것
+# train과 inference 단계에서 동일하게 사용 가능합니다.
+
+tags: ["klue", "klue/bert-base"] # 실험마다 꼭 작성 부탁드려요
+
+seed: 42
+
+test: True # Test 진행 여부. 'True'이면 train, validation 외에 추가적으로 test를 진행합니다.
+
+trainer:
+  min_epochs: 10
+  max_epochs: 10
+  gradient_clip_val: 0.5
+
+model:
+  net:
+    model_name: "klue/bert-base"
+  loss_fn:
+    _target_: torch.nn.CrossEntropyLoss # 원하는 Loss function으로 변경 가능합니다.
+    label_smoothing: 0.0
+  optimizer:
+    _target_: torch.optim.AdamW # 원하는 Optimizer로 변경 가능합니다.
+    lr: 0.001
+  scheduler:
+    _target_: torch.optim.lr_scheduler.ReduceLROnPlateau # 원하는 lr_scheduler로 변경 가능합니다.
+    mode: min
+    factor: 0.1
+    patience: 10
+
+data:
+  file_train: train.csv
+  file_val: val.csv
+  file_test: test.csv
+  batch_size: 32
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "klue-re"
+  aim:
+    experiment: "klue"

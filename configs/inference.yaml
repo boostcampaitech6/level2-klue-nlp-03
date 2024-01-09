@@ -1,0 +1,18 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - data: klue # choose datamodule with `test_dataloader()` for evaluation
+  - model: klue
+  - logger: null
+  - trainer: default
+  - paths: default
+  - extras: default
+  - hydra: default
+
+task_name: "inference"
+
+tags: ["prediction"]
+
+# passing checkpoint path is necessary for evaluation
+ckpt_path: ${paths.log_dir}train/runs/${model.net.model_name}/checkpoints/best_model.ckpt

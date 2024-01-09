@@ -1,0 +1,35 @@
+name: klue
+
+channels:
+  - conda-forge
+  - pytorch
+  - huggingface
+  - nvidia
+  - defaults
+
+dependencies:
+  # --------- basic --------- #
+  - python=3.9
+  - cudatoolkit=11.4.1
+  - faiss-gpu=1.7.4
+  - pytorch=1.12.1
+  - transformers=4.36
+  - lightning=2.*
+  - torchmetrics=1.*
+  - hydra-core=1.*
+  - rich=13.*
+  - pytest=7.*
+  - nodejs=20.*
+
+  # --------- logger --------- #
+  - wandb
+
+  # --------- pip --------- #
+  - pip>=23
+  - pip:
+    - hydra-optuna-sweeper
+    - hydra-colorlog
+    - rootutils
+    - matplotlib
+    - pandas
+    - seaborn

@@ -1,0 +1,22 @@
+_target_: src.models.klue_module.KLUEModule
+
+net:
+  _target_: src.models.components.pretrained_encoder.PretrainedEncoder
+  model_name: "klue/bert-base"
+  num_labels: 30
+
+loss_fn:
+  _target_: torch.nn.CrossEntropyLoss
+  label_smoothing: 0.0
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 0.001
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.1
+  patience: 10
