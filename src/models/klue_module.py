@@ -63,6 +63,8 @@ class KLUEModule(LightningModule):
         self.val_loss.reset()
         self.val_micro_f1.reset()
         self.val_micro_f1_best.reset()
+        self.val_auprc.reset()
+        self.val_auprc_best.reset()
 
     def model_step(self, batch):
         inputs = {key: val for key, val in batch.items() if key != "labels"}
@@ -99,10 +101,13 @@ class KLUEModule(LightningModule):
         self.log("val/auprc", self.val_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
     def on_validation_epoch_end(self) -> None:
-        micro_f1 = self.val_micro_f1.compute()  # get current val acc
-        self.val_micro_f1_best(micro_f1)  # update best so far val acc
-        # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
-        # otherwise metric would be reset by lightning after each epoch
+        micro_f1 = self.val_micro_f1.compute()  # get current val micro f1
+        self.val_micro_f1_best(micro_f1)  # update best so far val micro f1
+        auprc = self.val_auprc.compute()  # get current val micro f1
+        self.val_auprc_best(auprc)  # update best so far val micro f1
+
+        # log `val_micro_f1_best` and 'val_auprc_best' as values through `.compute()` method, instead of as a metric object
+        # otherwise metrics would be reset by lightning after each epoch
         self.log(
             "val/micro_f1_best", self.val_micro_f1_best.compute(), sync_dist=True, prog_bar=True
         )
