@@ -26,23 +26,23 @@ class KLUEModule(LightningModule):
         self.criterion = loss_fn
 
         self.train_micro_f1 = (
-            MulticlassF1Score(num_classes=30, average="micro", ignore_index=0) * 100.0
+            MulticlassF1Score(num_classes=30, average="micro", ignore_index=0) * 100
         )
         self.val_micro_f1 = (
-            MulticlassF1Score(num_classes=30, average="micro", ignore_index=0) * 100.0
+            MulticlassF1Score(num_classes=30, average="micro", ignore_index=0) * 100
         )
         self.test_micro_f1 = (
-            MulticlassF1Score(num_classes=30, average="micro", ignore_index=0) * 100.0
+            MulticlassF1Score(num_classes=30, average="micro", ignore_index=0) * 100
         )
 
         self.train_auprc = (
-            MulticlassAveragePrecision(num_classes=30, average="macro", ignore_index=0) * 100.0
+            MulticlassAveragePrecision(num_classes=30, average="macro", ignore_index=0) * 100
         )
         self.val_auprc = (
-            MulticlassAveragePrecision(num_classes=30, average="macro", ignore_index=0) * 100.0
+            MulticlassAveragePrecision(num_classes=30, average="macro", ignore_index=0) * 100
         )
         self.test_auprc = (
-            MulticlassAveragePrecision(num_classes=30, average="macro", ignore_index=0) * 100.0
+            MulticlassAveragePrecision(num_classes=30, average="macro", ignore_index=0) * 100
         )
 
         # for averaging loss across batches
