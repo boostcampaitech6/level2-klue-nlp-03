@@ -41,6 +41,7 @@ train: ## Train the model
 	python src/train.py
 
 set-git: ## Set gitmessage
+	git config --global core.editor "code --wait"
 	git config --local commit.template .gitmessage
 
 set-style-dep: # Install Linting packages
