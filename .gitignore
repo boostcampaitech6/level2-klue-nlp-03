@@ -153,6 +153,7 @@ configs/local/default.yaml
 configs/experiment/*.yaml
 !configs/experiment/example.yaml
 !configs/experiment/jingi.yaml
+!configs/experiment/yeonsu.yaml
 /logs/
 .env
 
