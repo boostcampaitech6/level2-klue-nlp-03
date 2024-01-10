@@ -12,6 +12,7 @@ model_checkpoint:
   mode: "max"
   save_last: True
   auto_insert_metric_name: False
+  enable_version_counter: False
 
 early_stopping:
   monitor: "val/micro_f1"
