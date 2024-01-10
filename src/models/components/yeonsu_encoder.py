@@ -12,6 +12,21 @@ class YeonsuEncoder(nn.Module):
         self.lstm = nn.LSTM(self.plm.config.hidden_size, 256)
         self.dropout2 = nn.Dropout(do_prob)
         self.fc = nn.Linear(256, num_labels)
+        self._init_weights(self.lstm)
+        self._init_weights(self.fc)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.LSTM):
+            for name, param in module.named_parameters():
+                if "weight_ih" in name:
+                    nn.init.xavier_uniform_(param.data)
+                elif "weight_hh" in name:
+                    nn.init.orthogonal_(param.data)
+                elif "bias" in name:
+                    param.data.fill_(0)
+        elif isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight)
+            nn.init.zeros_(module.bias)
 
     def forward(self, input_ids, attention_mask, token_type_ids):
         outputs = self.plm(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
