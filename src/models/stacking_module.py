@@ -24,14 +24,17 @@ class StackingModule(LightningModule):
         self.net = net
         self.binary_head = torch.nn.Linear(self.net.config.hidden_size, 2)
         self.multiclass_head = torch.nn.Linear(self.net.config.hidden_size, 30)
-        self.stacking_head = torch.nn.Linear(2, 1, bias=False)
+
+        # weight initialization
+        self._init_weights(self.binary_head)
+        self._init_weights(self.multiclass_head)
 
         # loss functions
         self.binary_criterion = binary_loss_fn
         self.multiclass_criterion = multiclass_loss_fn
 
-        # weight initialization
-        self._init_weights()
+        # loss sclaes for combining two losses
+        self.loss_scales = torch.nn.Parameter(torch.ones(2))
 
         # metrics
         self.train_micro_f1 = (
@@ -63,12 +66,10 @@ class StackingModule(LightningModule):
         self.val_micro_f1_best = MaxMetric()
         self.val_auprc_best = MaxMetric()
 
-    def _init_weights(self):
-        torch.nn.init.xavier_uniform_(self.binary_head.weight)
-        torch.nn.init.xavier_uniform_(self.multiclass_head.weight)
-        torch.nn.init.xavier_uniform_(self.stacking_head.weight)
-        torch.nn.init.zeros_(self.binary_head.bias)
-        torch.nn.init.zeros_(self.multiclass_head.bias)
+    def _init_weights(self, module):
+        if isinstance(module, torch.nn.Linear):
+            torch.nn.init.xavier_uniform_(module.weight)
+            torch.nn.init.zeros_(module.bias)
 
     def forward(self, **inputs):
         return self.net(**inputs)
@@ -98,10 +99,11 @@ class StackingModule(LightningModule):
         multiclass_logits = self.multiclass_head(logits)
         multiclass_loss = self.multiclass_criterion(multiclass_logits, targets)
 
-        # stacking phase
-        combined_loss = torch.stack([binary_loss, multiclass_loss]).unsqueeze(0)
-        loss = self.stacking_head(combined_loss)
-        return loss, multiclass_logits, targets
+        # combining two losses
+        scales = torch.softmax(self.loss_scales, dim=0)
+        total_loss = scales[0] * binary_loss + scales[1] * multiclass_loss
+
+        return total_loss, multiclass_logits, targets
 
     def training_step(self, batch, batch_idx):
         loss, logits, targets = self.model_step(batch)
