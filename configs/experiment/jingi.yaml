@@ -6,7 +6,6 @@
 defaults:
   - override /data: klue
   - override /model: klue
-  - override /callbacks: default
   - override /trainer: default
 
 # all parameters below will be merged with parameters from default configurations set above
