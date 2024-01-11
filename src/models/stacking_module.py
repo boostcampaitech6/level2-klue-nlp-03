@@ -158,7 +158,8 @@ class StackingModule(LightningModule):
 
     def predict_step(self, batch, batch_idx):
         inputs = {key: val for key, val in batch.items() if key != "labels"}
-        return self.forward(**inputs)
+        logits = self.forward(**inputs)
+        return self.multiclass_head(logits)
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
