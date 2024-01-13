@@ -6,55 +6,17 @@ import datasets
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
+from .labelsets import label_translated, labelset_ko, type_translated
 
-class KLUEDataset(Dataset):
+
+class UniSTDataset(Dataset):
     def __init__(self, dataset, is_pred=False):
-        self.data = []
-        raw_labelset = [
-            "no_relation",
-            "org:top_members/employees",
-            "org:members",
-            "org:product",
-            "per:title",
-            "org:alternate_names",
-            "per:employee_of",
-            "org:place_of_headquarters",
-            "per:product",
-            "org:number_of_employees/members",
-            "per:children",
-            "per:place_of_residence",
-            "per:alternate_names",
-            "per:other_family",
-            "per:colleagues",
-            "per:origin",
-            "per:siblings",
-            "per:spouse",
-            "org:founded",
-            "org:political/religious_affiliation",
-            "org:member_of",
-            "per:parents",
-            "org:dissolved",
-            "per:schools_attended",
-            "per:date_of_death",
-            "per:date_of_birth",
-            "per:place_of_birth",
-            "per:place_of_death",
-            "org:founded_by",
-            "per:religion",
-        ]
-
         assert isinstance(dataset, datasets.Dataset)
 
         self.dataset = dataset.map(self.get_entity_dict, batched=True)
         self.dataset = self.dataset.map(self.add_task_description)
         self.is_pred = is_pred
-        self.labelset = [self.preprocess_label(label) for label in raw_labelset]
-
-    def preprocess_label(self, label):
-        rep_rule = (("_", " "), ("per:", "person "), ("org:", "organization "))
-        for r in rep_rule:
-            label = label.replace(*r)
-        return label
+        self.labelset = labelset_ko
 
     def get_entity_dict(self, examples):
         return {
@@ -66,15 +28,18 @@ class KLUEDataset(Dataset):
         ss, se, st, sw = (
             examples["subject_entity"]["start_idx"],
             examples["subject_entity"]["end_idx"] + 1,
-            examples["subject_entity"]["type"].lower(),
+            examples["subject_entity"]["type"],
             examples["subject_entity"]["word"],
         )
         os, oe, ot, ow = (
             examples["object_entity"]["start_idx"],
             examples["object_entity"]["end_idx"] + 1,
-            examples["object_entity"]["type"].lower(),
+            examples["object_entity"]["type"],
             examples["object_entity"]["word"],
         )
+
+        st = type_translated[st]
+        ot = type_translated[ot]
 
         if ss < os:
             sent = (
@@ -121,8 +86,8 @@ class KLUEDataset(Dataset):
         item["sentence"] = self.dataset[idx]["sentence"]
         item["description"] = self.dataset[idx]["description"]
         if not self.is_pred:
-            true = self.preprocess_label(self.dataset[idx]["label"])
-            item["label"] = true
+            true = label_translated[self.dataset[idx]["label"]]
+            item["labels"] = true
             false = true
             while false == true:
                 false = random.choice(self.labelset)

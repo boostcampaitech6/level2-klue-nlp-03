@@ -1,0 +1,7 @@
+_target_: src.data.unist_datamodule.UniSTDataModule
+data_dir: ${paths.data_dir}
+file_train: train.csv
+file_val: val.csv
+file_test: test.csv
+file_pred: test_data.csv
+batch_size: 32
