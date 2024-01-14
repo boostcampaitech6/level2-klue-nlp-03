@@ -7,14 +7,17 @@ import torch.nn.functional as F
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification import MulticlassAveragePrecision, MulticlassF1Score
+from transformers import AutoConfig
 
 from ..data.components.labelsets import labelset_ko
+from .components.unist_model import UniSTModel
 
 
 class UniSTModule(LightningModule):
     def __init__(
         self,
-        net: torch.nn.Module = None,
+        model_name: str = "klue/bert-base",
+        margin: float = 0.1,
         optimizer: torch.optim.Optimizer = None,
         scheduler: torch.optim.lr_scheduler = None,
     ) -> None:
@@ -24,13 +27,12 @@ class UniSTModule(LightningModule):
         # also ensures init params will be stored in ckpt
         self.save_hyperparameters(logger=False)
 
-        self.net = net
+        config = AutoConfig.from_pretrained(model_name)
+        config.margin = margin
+        self.net = UniSTModel.from_pretrained(model_name, config=config)
 
-        tokenized_labelset = self.net.tokenizer(
-            labelset_ko, padding=True, truncation=True, max_length=13, return_tensors="pt"
-        )
-        self.labelset_input_ids = tokenized_labelset["input_ids"].to("cuda:0")
-        self.labelset_attention_mask = tokenized_labelset["attention_mask"].to("cuda:0")
+        self.labelset_input_ids = None
+        self.labelset_attention_mask = None
 
         # metrics
         self.train_micro_f1 = (
@@ -53,13 +55,24 @@ class UniSTModule(LightningModule):
             MulticlassAveragePrecision(num_classes=30, average="macro", ignore_index=0) * 100
         )
 
+        # for averaging loss across batches
+        self.train_loss = MeanMetric()
+        self.val_loss = MeanMetric()
+        self.test_loss = MeanMetric()
+
         # for tracking best so far validation metrics (micro_f1, auprc)
         self.val_micro_f1_best = MaxMetric()
         self.val_auprc_best = MaxMetric()
 
+        self.train_step_embeddings = []
+        self.train_step_labels = []
+
+        self.validation_step_embeddings = []
+        self.validation_step_labels = []
+
     def convert_to_logits(self, dists):
-        tensor = torch.stack(dists)
-        inverted_tensor = 1 - tensor
+        dists = torch.stack(dists)
+        inverted_tensor = 1 - dists
         eps = 1e-6
         clipped_tensor = torch.clamp(inverted_tensor, 1 - eps)
         logits = torch.log(clipped_tensor / (1 - clipped_tensor))
@@ -71,7 +84,7 @@ class UniSTModule(LightningModule):
     def on_train_start(self) -> None:
         # by default lightning executes validation step sanity checks before training starts,
         # so it's worth to make sure validation metrics don't store results from these checks
-
+        self.val_loss.reset()
         self.val_micro_f1.reset()
         self.val_micro_f1_best.reset()
         self.val_auprc.reset()
@@ -79,65 +92,82 @@ class UniSTModule(LightningModule):
 
     def model_step(self, batch):
         inputs = {key: val for key, val in batch.items() if key != "label_ids"}
-        label_ids = batch["label_ids"]
+        label_ids = torch.as_tensor(batch["label_ids"])
         loss, embeddings = self.forward(inputs)
         return loss, embeddings, label_ids
 
     def training_step(self, batch, batch_idx):
         loss, embeddings, label_ids = self.model_step(batch)
+        # update and log metrics
+        self.train_loss(loss)
+        self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
+
+        self.train_step_embeddings.append(embeddings)
+        self.train_step_labels.append(label_ids)
+        # return loss or backpropagation will fail
+        return loss
+
+    def on_train_epoch_end(self):
+        embeddings = torch.cat(self.train_step_embeddings, dim=0)
+        label_ids = torch.cat(self.train_step_labels, dim=0)
+        self.train_step_embeddings.clear()
+        self.train_step_labels.clear()
 
         with torch.no_grad():
             labelset_embeddings = self.net.embed(
-                self.labelset_input_ids, self.labelset_attention_mask
+                self.labelset_input_ids.to(self.device),
+                self.labelset_attention_mask.to(self.device),
             )
 
-        dists = []
-        for i in range(len(embeddings)):
-            embedding = embeddings[i].expand(labelset_embeddings.shape)
-            dist = self.net.dist_fn(embedding, labelset_embeddings)
-            dists.append(dist)
-        logits = self.convert_to_logits(dists)
+            dists = []
+            for i in range(len(embeddings)):
+                embedding = embeddings[i].expand(labelset_embeddings.shape)
+                dist = self.net.dist_fn(embedding, labelset_embeddings).detach().cpu()
+                dists.append(dist)
 
-        label_ids = torch.tensor(label_ids).to(self.device)
+            logits = self.convert_to_logits(dists)
 
-        # update and log metrics
-        self.train_loss(loss)
         self.train_micro_f1(logits, label_ids)
         self.train_auprc(logits, label_ids)
-        self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log(
             "train/micro_f1", self.train_micro_f1, on_step=False, on_epoch=True, prog_bar=True
         )
         self.log("train/auprc", self.train_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
-        # return loss or backpropagation will fail
-        return loss
-
     def validation_step(self, batch, batch_idx) -> None:
         loss, embeddings, label_ids = self.model_step(batch)
-        with torch.no_grad():
-            labelset_embeddings = self.net.embed(
-                self.labelset_input_ids, self.labelset_attention_mask
-            )
-
-        dists = []
-        for i in range(len(embeddings)):
-            embedding = embeddings[i].expand(labelset_embeddings.shape)
-            dist = self.net.dist_fn(embedding, labelset_embeddings)
-            dists.append(dist)
-        logits = self.convert_to_logits(dists)
-
-        label_ids = torch.tensor(label_ids).to(self.device)
 
         # update and log metrics
         self.val_loss(loss)
+        self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
+
+        self.validation_step_embeddings.append(embeddings)
+        self.validation_step_labels.append(label_ids)
+
+    def on_validation_epoch_end(self):
+        embeddings = torch.cat(self.validation_step_embeddings, dim=0)
+        label_ids = torch.cat(self.validation_step_labels, dim=0)
+        self.validation_step_embeddings.clear()
+        self.validation_step_labels.clear()
+        with torch.no_grad():
+            labelset_embeddings = self.net.embed(
+                self.labelset_input_ids.to(self.device),
+                self.labelset_attention_mask.to(self.device),
+            )
+
+            dists = []
+            for i in range(len(embeddings)):
+                embedding = embeddings[i].expand(labelset_embeddings.shape)
+                dist = self.net.dist_fn(embedding, labelset_embeddings).detach().cpu()
+                dists.append(dist)
+
+            logits = self.convert_to_logits(dists)
+
         self.val_micro_f1(logits, label_ids)
         self.val_auprc(logits, label_ids)
-        self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val/micro_f1", self.val_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val/auprc", self.val_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
-    def on_validation_epoch_end(self) -> None:
         micro_f1 = self.val_micro_f1.compute()  # get current val micro f1
         self.val_micro_f1_best(micro_f1)  # update best so far val micro f1
         auprc = self.val_auprc.compute()  # get current val micro f1
@@ -155,18 +185,17 @@ class UniSTModule(LightningModule):
 
         with torch.no_grad():
             labelset_embeddings = self.net.embed(
-                self.labelset_input_ids, self.labelset_attention_mask
+                self.labelset_input_ids.to(self.device),
+                self.labelset_attention_mask.to(self.device),
             )
 
-        dists = []
-        for i in range(len(embeddings)):
-            embedding = embeddings[i].expand(labelset_embeddings.shape)
-            dist = self.net.dist_fn(embedding, labelset_embeddings)
-            dists.append(dist)
+            dists = []
+            for i in range(len(embeddings)):
+                embedding = embeddings[i].expand(labelset_embeddings.shape)
+                dist = self.net.dist_fn(embedding, labelset_embeddings).detach().cpu()
+                dists.append(dist)
 
-        logits = self.convert_to_logits(dists)
-
-        label_ids = torch.tensor(label_ids).to(self.device)
+            logits = self.convert_to_logits(dists)
 
         # update and log metrics
         self.test_loss(loss)
@@ -186,12 +215,13 @@ class UniSTModule(LightningModule):
                 self.labelset_input_ids, self.labelset_attention_mask
             )
 
-        dists = []
-        for i in range(len(embeddings)):
-            embedding = embeddings[i].expand(labelset_embeddings.shape)
-            dist = self.net.dist_fn(embedding, labelset_embeddings)
-            dists.append(dist)
-        logits = self.convert_to_logits(dists)
+            dists = []
+            for i in range(len(embeddings)):
+                embedding = embeddings[i].expand(labelset_embeddings.shape)
+                dist = self.net.dist_fn(embedding, labelset_embeddings).detach().cpu()
+                dists.append(dist)
+
+            logits = self.convert_to_logits(dists)
 
         return logits
 

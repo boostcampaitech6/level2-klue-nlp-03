@@ -1,11 +1,13 @@
 from typing import Any, Dict, Optional
 
+import os
+
 from datasets import Dataset, load_dataset
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader
-from transformers import DataCollatorWithPadding
+from transformers import AutoTokenizer, DataCollatorWithPadding
 
-from ..models.components.unist_model import UniSTModel
+from .components.labelsets import labelset_ko
 from .components.unist_dataset import UniSTDataset
 
 
@@ -23,13 +25,26 @@ class UniSTDataModule(LightningDataModule):
         super().__init__()
         self.save_hyperparameters(logger=False)
 
-        self.tokenizer = UniSTModel().tokenizer
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        special_tokens_dict = {
+            "additional_special_tokens": ["<SUBJ>", "</SUBJ>", "<OBJ>", "</OBJ>"]
+        }
+        self.tokenizer.add_special_tokens(special_tokens_dict)
         self.data_collator = DataCollatorWithPadding(tokenizer=self.tokenizer, return_tensors="pt")
+
+        tokenized_labelset = self.tokenizer(labelset_ko, truncation=True, max_length=13)
+        collated_labelset = self.data_collator(tokenized_labelset)
+        self.labelset_input_ids = collated_labelset["input_ids"]
+        self.labelset_attention_mask = collated_labelset["attention_mask"]
 
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
         self.data_test: Optional[Dataset] = None
         self.data_pred: Optional[Dataset] = None
+
+    def prepare_data(self):
+        AutoTokenizer.from_pretrained(self.hparams.model_name)
 
     def collate_fn(self, batch):
         sentences = [sample["sentence"] for sample in batch]
