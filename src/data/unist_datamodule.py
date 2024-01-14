@@ -35,7 +35,7 @@ class UniSTDataModule(LightningDataModule):
         sentences = [sample["sentence"] for sample in batch]
         descriptions = [sample["description"] for sample in batch]
 
-        tokenized_texts = self.tokenizer(sentences, descriptions, truncation=True)
+        tokenized_texts = self.tokenizer(sentences, descriptions, max_length=256, truncation=True)
         collated_texts = self.data_collator(tokenized_texts)
 
         if "labels" in batch[0].keys():
@@ -44,10 +44,10 @@ class UniSTDataModule(LightningDataModule):
                 sample["false"] for sample in batch
             ]  # Assuming 'false' is a key in your data
 
-            tokenized_labels = self.tokenizer(labels, truncation=True)
+            tokenized_labels = self.tokenizer(labels, max_length=13, truncation=True)
             collated_labels = self.data_collator(tokenized_labels)
 
-            tokenized_false = self.tokenizer(falses, truncation=True)
+            tokenized_false = self.tokenizer(falses, max_length=13, truncation=True)
             collated_false = self.data_collator(tokenized_false)
 
             label_ids = [sample["label_ids"] for sample in batch]

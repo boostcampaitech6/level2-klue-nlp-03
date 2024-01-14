@@ -27,7 +27,7 @@ class UniSTModule(LightningModule):
         self.net = net
 
         tokenized_labelset = self.net.tokenizer(
-            labelset_ko, padding=True, truncation=True, return_tensors="pt"
+            labelset_ko, padding=True, truncation=True, max_length=13, return_tensors="pt"
         )
         self.labelset_input_ids = tokenized_labelset["input_ids"].to("cuda:0")
         self.labelset_attention_mask = tokenized_labelset["attention_mask"].to("cuda:0")

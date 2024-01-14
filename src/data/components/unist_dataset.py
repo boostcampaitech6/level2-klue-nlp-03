@@ -97,7 +97,7 @@ class UniSTDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        item = defaultdict()
+        item = {}
         item["sentence"] = self.dataset[idx]["sentence"]
         item["description"] = self.dataset[idx]["description"]
         if not self.is_pred:
