@@ -83,7 +83,10 @@ class UniSTModule(LightningModule):
     def training_step(self, batch, batch_idx):
         loss, embeddings, label_ids = self.model_step(batch)
 
-        labelset_embeddings = self.net.embed(self.labelset_input_ids, self.labelset_attention_mask)
+        with torch.no_grad():
+            labelset_embeddings = self.net.embed(
+                self.labelset_input_ids, self.labelset_attention_mask
+            )
 
         dists = []
         for i in range(len(embeddings)):
@@ -110,8 +113,10 @@ class UniSTModule(LightningModule):
 
     def validation_step(self, batch, batch_idx) -> None:
         loss, embeddings, label_ids = self.model_step(batch)
-
-        labelset_embeddings = self.net.embed(self.labelset_input_ids, self.labelset_attention_mask)
+        with torch.no_grad():
+            labelset_embeddings = self.net.embed(
+                self.labelset_input_ids, self.labelset_attention_mask
+            )
 
         dists = []
         for i in range(len(embeddings)):
@@ -147,7 +152,10 @@ class UniSTModule(LightningModule):
     def test_step(self, batch, batch_idx) -> None:
         loss, embeddings, label_ids = self.model_step(batch)
 
-        labelset_embeddings = self.net.embed(self.labelset_input_ids, self.labelset_attention_mask)
+        with torch.no_grad():
+            labelset_embeddings = self.net.embed(
+                self.labelset_input_ids, self.labelset_attention_mask
+            )
 
         dists = []
         for i in range(len(embeddings)):
@@ -168,11 +176,14 @@ class UniSTModule(LightningModule):
         self.log("test/auprc", self.test_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
     def predict_step(self, batch, batch_idx):
-        input_ids = batch["input_ids"]
-        attention_mask = batch["attention_mask"]
+        input_ids = batch["texts_input_ids"]
+        attention_mask = batch["texts_attention_mask"]
 
         embeddings = self.net.embed(input_ids, attention_mask)
-        labelset_embeddings = self.net.embed(self.labelset_input_ids, self.labelset_attention_mask)
+        with torch.no_grad():
+            labelset_embeddings = self.net.embed(
+                self.labelset_input_ids, self.labelset_attention_mask
+            )
 
         dists = []
         for i in range(len(embeddings)):
