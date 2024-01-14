@@ -1,3 +1,36 @@
+label2id = {
+    "no_relation": 0,
+    "org:top_members/employees": 1,
+    "org:members": 2,
+    "org:product": 3,
+    "per:title": 4,
+    "org:alternate_names": 5,
+    "per:employee_of": 6,
+    "org:place_of_headquarters": 7,
+    "per:product": 8,
+    "org:number_of_employees/members": 9,
+    "per:children": 10,
+    "per:place_of_residence": 11,
+    "per:alternate_names": 12,
+    "per:other_family": 13,
+    "per:colleagues": 14,
+    "per:origin": 15,
+    "per:siblings": 16,
+    "per:spouse": 17,
+    "org:founded": 18,
+    "org:political/religious_affiliation": 19,
+    "org:member_of": 20,
+    "per:parents": 21,
+    "org:dissolved": 22,
+    "per:schools_attended": 23,
+    "per:date_of_death": 24,
+    "per:date_of_birth": 25,
+    "per:place_of_birth": 26,
+    "per:place_of_death": 27,
+    "org:founded_by": 28,
+    "per:religion": 29,
+}
+
 type_translated = {"PER": "인물", "ORG": "기관", "POH": "기타", "DAT": "날짜", "LOC": "장소", "NOH": "수량"}
 
 label_translated = {

@@ -2,17 +2,14 @@ _target_: src.models.unist_module.UniSTModule
 
 net:
   _target_: src.models.components.unist_model.UniSTModel
-  model_name: "klue/bert-base"
+  model_name: "klue/roberta-base"
   margin: 0.1
 
 optimizer:
   _target_: torch.optim.AdamW
   _partial_: true
-  lr: 0.001
+  lr: 5e-6
 
 scheduler:
-  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _target_: transformers.get_linear_schedule_with_warmup
   _partial_: true
-  mode: min
-  factor: 0.1
-  patience: 10

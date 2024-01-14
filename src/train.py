@@ -66,8 +66,9 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
         trainer.fit(
             model=model,
-            train_dataloaders=train_dataloader,
-            val_dataloaders=val_dataloader,
+            datamodule=datamodule,
+            # train_dataloaders=train_dataloader,
+            # val_dataloaders=val_dataloader,
             ckpt_path=cfg.get("ckpt_path"),
         )
 

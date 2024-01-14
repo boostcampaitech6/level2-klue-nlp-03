@@ -6,7 +6,7 @@ import datasets
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from .labelsets import label_translated, labelset_ko, type_translated
+from .labelsets import label2id, label_translated, labelset_ko, type_translated
 
 
 class UniSTDataset(Dataset):
@@ -16,7 +16,10 @@ class UniSTDataset(Dataset):
         self.dataset = dataset.map(self.get_entity_dict, batched=True)
         self.dataset = self.dataset.map(self.add_task_description)
         self.is_pred = is_pred
-        self.labelset = labelset_ko
+        if not self.is_pred:
+            self.dataset = self.dataset.map(self.encode_label_to_id, batched=True)
+            self.dataset = self.dataset.map(self.translate_label, batched=True)
+            self.dataset = self.dataset.map(self.get_false_label)
 
     def get_entity_dict(self, examples):
         return {
@@ -78,6 +81,18 @@ class UniSTDataset(Dataset):
 
         return {"sentence": sent, "description": desc}
 
+    def encode_label_to_id(self, examples):
+        return {"label_ids": [label2id[example] for example in examples["label"]]}
+
+    def translate_label(self, examples):
+        return {"labels": [label_translated[en] for en in examples["label"]]}
+
+    def get_false_label(self, examples):
+        true_label = examples["labels"]
+        choices = set(labelset_ko) - {true_label}
+        false_label = random.choice(list(choices))
+        return {"false": false_label}
+
     def __len__(self):
         return len(self.dataset)
 
@@ -86,11 +101,8 @@ class UniSTDataset(Dataset):
         item["sentence"] = self.dataset[idx]["sentence"]
         item["description"] = self.dataset[idx]["description"]
         if not self.is_pred:
-            true = label_translated[self.dataset[idx]["label"]]
-            item["labels"] = true
-            false = true
-            while false == true:
-                false = random.choice(self.labelset)
-            item["false"] = false
+            item["labels"] = self.dataset[idx]["labels"]
+            item["false"] = self.dataset[idx]["false"]
+            item["label_ids"] = self.dataset[idx]["label_ids"]
 
         return item

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoConfig, AutoModel, AutoTokenizer
+from transformers import AutoConfig, RobertaModel, RobertaTokenizerFast
 
 
 class UniSTModel(nn.Module):
@@ -9,17 +9,14 @@ class UniSTModel(nn.Module):
         super().__init__()
         config = AutoConfig.from_pretrained(model_name)
         config.margin = margin
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer = RobertaTokenizerFast.from_pretrained(model_name)
         special_tokens_dict = {
             "additional_special_tokens": ["<SUBJ>", "</SUBJ>", "<OBJ>", "</OBJ>"]
         }
-        tokenizer.add_special_tokens(special_tokens_dict)
+        self.tokenizer.add_special_tokens(special_tokens_dict)
 
-        self.model = AutoModel.from_pretrained(model_name, config=config)
-        self.model.resize_token_embeddings(len(tokenizer))
-        self.head = torch.nn.Linear(self.model.config.hidden_size, 30)
-        torch.nn.init.xavier_uniform_(self.head.weight)
-        torch.nn.init.zeros_(self.head.bias)
+        self.model = RobertaModel.from_pretrained(model_name, config=config)
+        self.model.resize_token_embeddings(len(self.tokenizer))
 
     def forward(self, texts_inputs, labels_inputs, false_inputs):
         texts_embeddings = self.embed(**texts_inputs)
@@ -41,13 +38,12 @@ class UniSTModel(nn.Module):
         attention_mask=None,
     ):
         outputs = self.model(
-            input_ids=input_ids.to("cuda:0"),
-            token_type_ids=token_type_ids.to("cuda:0"),
-            attention_mask=attention_mask.to("cuda:0"),
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
         )
         pooled_outputs = outputs.get("pooler_output", outputs.last_hidden_state[:, 0])
-        embeddings = self.head(pooled_outputs)
-        return embeddings
+        return pooled_outputs
 
     def dist_fn(self, texts_embeddings, label_embeddings):
         return 1.0 - F.cosine_similarity(texts_embeddings, label_embeddings)

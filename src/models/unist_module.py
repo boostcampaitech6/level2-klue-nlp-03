@@ -3,10 +3,10 @@ from typing import Any, Dict, Tuple
 import os
 
 import torch
+import torch.nn.functional as F
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification import MulticlassAveragePrecision, MulticlassF1Score
-from transformers import AutoTokenizer
 
 from ..data.components.labelsets import labelset_ko
 
@@ -25,18 +25,12 @@ class UniSTModule(LightningModule):
         self.save_hyperparameters(logger=False)
 
         self.net = net
-        model_name = self.net.model.config._name_or_path
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        special_tokens_dict = {
-            "additional_special_tokens": ["<SUBJ>", "</SUBJ>", "<OBJ>", "</OBJ>"]
-        }
-        self.tokenizer.add_special_tokens(special_tokens_dict)
+        os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
         self.labelset = labelset_ko
-        self.labelset_inputs = self.tokenizer(
+        self.labelset_inputs = self.net.tokenizer(
             self.labelset, padding=True, truncation=True, return_tensors="pt"
-        )
+        ).to("cuda:0")
 
         # metrics
         self.train_micro_f1 = (
@@ -82,46 +76,45 @@ class UniSTModule(LightningModule):
 
     def model_step(self, batch):
         inputs = {}
-        texts_inputs = self.tokenizer(
+        texts_inputs = self.net.tokenizer(
             batch["sentence"],
             batch["description"],
             padding=True,
             truncation=True,
             return_tensors="pt",
         )
-        labels_inputs = self.tokenizer(
+        labels_inputs = self.net.tokenizer(
             batch["labels"], padding=True, truncation=True, return_tensors="pt"
         )
-        false_inputs = self.tokenizer(
+        false_inputs = self.net.tokenizer(
             batch["false"], padding=True, truncation=True, return_tensors="pt"
         )
 
-        inputs["texts_inputs"] = texts_inputs
-        inputs["labels_inputs"] = labels_inputs
-        inputs["false_inputs"] = false_inputs
+        inputs["texts_inputs"] = texts_inputs.to("cuda:0")
+        inputs["labels_inputs"] = labels_inputs.to("cuda:0")
+        inputs["false_inputs"] = false_inputs.to("cuda:0")
 
-        targets = batch["labels"]
+        label_ids = batch["label_ids"]
         loss, embeddings = self.forward(inputs)
-        return loss, embeddings, targets
+        return loss, embeddings, label_ids
 
     def training_step(self, batch, batch_idx):
-        loss, embeddings, targets = self.model_step(batch)
-        target_ids = torch.as_tensor([self.labelset.index(target) for target in targets]).to(
-            "cuda:0"
-        )
+        loss, embeddings, label_ids = self.model_step(batch)
 
-        labelset_embeddings = self.net.embed(**self.labelset_inputs)
+        labelset_embeddings = self.net.embed(**self.labelset_inputs.to("cuda:0"))
 
         dists = []
         for i in range(len(embeddings)):
-            dist = self.net.dist_fn(embeddings[i], labelset_embeddings)
+            embedding = embeddings[i].expand(labelset_embeddings.shape)
+            dist = self.net.dist_fn(embedding, labelset_embeddings)
             dists.append(dist)
-        logits = 1 - torch.stack(dists)
+        dists_tensor = torch.stack(dists)
+        probs = F.softmax(-dists_tensor, dim=1)
 
         # update and log metrics
         self.train_loss(loss)
-        self.train_micro_f1(logits, target_ids)
-        self.train_auprc(logits, target_ids)
+        self.train_micro_f1(probs, label_ids)
+        self.train_auprc(probs, label_ids)
         self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log(
             "train/micro_f1", self.train_micro_f1, on_step=False, on_epoch=True, prog_bar=True
@@ -132,23 +125,22 @@ class UniSTModule(LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx) -> None:
-        loss, embeddings, targets = self.model_step(batch)
-        target_ids = torch.as_tensor([self.labelset.index(target) for target in targets]).to(
-            "cuda:0"
-        )
+        loss, embeddings, label_ids = self.model_step(batch)
 
         labelset_embeddings = self.net.embed(**self.labelset_inputs)
 
         dists = []
         for i in range(len(embeddings)):
-            dist = self.net.dist_fn(embeddings[i], labelset_embeddings)
+            embedding = embeddings[i].expand(labelset_embeddings.shape)
+            dist = self.net.dist_fn(embedding, labelset_embeddings)
             dists.append(dist)
-        logits = 1.0 - torch.stack(dists)
+        dists_tensor = torch.stack(dists)
+        probs = F.softmax(-dists_tensor, dim=1)
 
         # update and log metrics
         self.val_loss(loss)
-        self.val_micro_f1(logits, target_ids)
-        self.val_auprc(logits, target_ids)
+        self.val_micro_f1(probs, label_ids)
+        self.val_auprc(probs, label_ids)
         self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val/micro_f1", self.val_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val/auprc", self.val_auprc, on_step=False, on_epoch=True, prog_bar=True)
@@ -167,58 +159,70 @@ class UniSTModule(LightningModule):
         self.log("val/auprc_best", self.val_auprc_best.compute(), sync_dist=True, prog_bar=True)
 
     def test_step(self, batch, batch_idx) -> None:
-        loss, embeddings, targets = self.model_step(batch)
-        target_ids = torch.as_tensor([self.labelset.index(target) for target in targets]).to(
-            "cuda:0"
-        )
+        loss, embeddings, label_ids = self.model_step(batch)
 
         labelset_embeddings = self.net.embed(**self.labelset_inputs)
 
         dists = []
         for i in range(len(embeddings)):
-            dist = self.net.dist_fn(embeddings[i], labelset_embeddings)
+            embedding = embeddings[i].expand(labelset_embeddings.shape)
+            dist = self.net.dist_fn(embedding, labelset_embeddings)
             dists.append(dist)
-        logits = 1 - torch.stack(dists)
+        dists_tensor = torch.stack(dists)
+        probs = F.softmax(-dists_tensor, dim=1)
 
         # update and log metrics
         self.test_loss(loss)
-        self.test_micro_f1(logits, target_ids)
-        self.test_auprc(logits, target_ids)
+        self.test_micro_f1(probs, label_ids)
+        self.test_auprc(probs, label_ids)
         self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/micro_f1", self.test_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/auprc", self.test_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
     def predict_step(self, batch, batch_idx):
-        inputs = self.tokenizer(
+        inputs = self.net.tokenizer(
             batch["sentence"],
             batch["description"],
             padding=True,
             truncation=True,
             return_tensors="pt",
-        )
+        ).to("cuda:0")
         embeddings = self.net.embed(**inputs)
         labelset_embeddings = self.net.embed(**inputs)
+
         dists = []
         for i in range(len(embeddings)):
-            dist = self.net.dist_fn(embeddings[i], labelset_embeddings)
+            embedding = embeddings[i].expand(labelset_embeddings.shape)
+            dist = self.net.dist_fn(embedding, labelset_embeddings)
             dists.append(dist)
-        logits = 1.0 - torch.stack(dists)
-        return logits
+        dists_tensor = torch.stack(dists)
+        probs = F.softmax(-dists_tensor, dim=1)
+
+        return probs
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
         if self.hparams.scheduler is not None:
-            scheduler = self.hparams.scheduler(optimizer=optimizer)
+            scheduler = self.hparams.scheduler(
+                optimizer=optimizer,
+                num_warmup_steps=0.1 * self.total_steps,
+                num_training_steps=self.total_steps,
+            )
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": scheduler,
                     "monitor": "val/loss",
                     "interval": "epoch",
-                    "frequency": 1,
                 },
             }
         return {"optimizer": optimizer}
+
+    def setup(self, stage=None):
+        if stage == "fit":
+            self.total_steps = self.trainer.max_epochs * len(
+                self.trainer.datamodule.train_dataloader()
+            )
 
 
 if __name__ == "__main__":
