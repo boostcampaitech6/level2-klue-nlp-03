@@ -25,12 +25,12 @@ class UniSTModule(LightningModule):
         self.save_hyperparameters(logger=False)
 
         self.net = net
-        os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
-        self.labelset = labelset_ko
-        self.labelset_inputs = self.net.tokenizer(
-            self.labelset, padding=True, truncation=True, return_tensors="pt"
-        ).to("cuda:0")
+        tokenized_labelset = self.net.tokenizer(
+            labelset_ko, padding=True, truncation=True, return_tensors="pt"
+        )
+        self.labelset_input_ids = tokenized_labelset["input_ids"].to("cuda:0")
+        self.labelset_attention_mask = tokenized_labelset["attention_mask"].to("cuda:0")
 
         # metrics
         self.train_micro_f1 = (
@@ -75,25 +75,7 @@ class UniSTModule(LightningModule):
         self.val_auprc_best.reset()
 
     def model_step(self, batch):
-        inputs = {}
-        texts_inputs = self.net.tokenizer(
-            batch["sentence"],
-            batch["description"],
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
-        )
-        labels_inputs = self.net.tokenizer(
-            batch["labels"], padding=True, truncation=True, return_tensors="pt"
-        )
-        false_inputs = self.net.tokenizer(
-            batch["false"], padding=True, truncation=True, return_tensors="pt"
-        )
-
-        inputs["texts_inputs"] = texts_inputs.to("cuda:0")
-        inputs["labels_inputs"] = labels_inputs.to("cuda:0")
-        inputs["false_inputs"] = false_inputs.to("cuda:0")
-
+        inputs = {key: val for key, val in batch.items() if key != "label_ids"}
         label_ids = batch["label_ids"]
         loss, embeddings = self.forward(inputs)
         return loss, embeddings, label_ids
@@ -101,7 +83,7 @@ class UniSTModule(LightningModule):
     def training_step(self, batch, batch_idx):
         loss, embeddings, label_ids = self.model_step(batch)
 
-        labelset_embeddings = self.net.embed(**self.labelset_inputs.to("cuda:0"))
+        labelset_embeddings = self.net.embed(self.labelset_input_ids, self.labelset_attention_mask)
 
         dists = []
         for i in range(len(embeddings)):
@@ -110,6 +92,8 @@ class UniSTModule(LightningModule):
             dists.append(dist)
         dists_tensor = torch.stack(dists)
         probs = F.softmax(-dists_tensor, dim=1)
+
+        label_ids = torch.tensor(label_ids).to(self.device)
 
         # update and log metrics
         self.train_loss(loss)
@@ -127,7 +111,7 @@ class UniSTModule(LightningModule):
     def validation_step(self, batch, batch_idx) -> None:
         loss, embeddings, label_ids = self.model_step(batch)
 
-        labelset_embeddings = self.net.embed(**self.labelset_inputs)
+        labelset_embeddings = self.net.embed(self.labelset_input_ids, self.labelset_attention_mask)
 
         dists = []
         for i in range(len(embeddings)):
@@ -136,6 +120,8 @@ class UniSTModule(LightningModule):
             dists.append(dist)
         dists_tensor = torch.stack(dists)
         probs = F.softmax(-dists_tensor, dim=1)
+
+        label_ids = torch.tensor(label_ids).to(self.device)
 
         # update and log metrics
         self.val_loss(loss)
@@ -161,7 +147,7 @@ class UniSTModule(LightningModule):
     def test_step(self, batch, batch_idx) -> None:
         loss, embeddings, label_ids = self.model_step(batch)
 
-        labelset_embeddings = self.net.embed(**self.labelset_inputs)
+        labelset_embeddings = self.net.embed(self.labelset_input_ids, self.labelset_attention_mask)
 
         dists = []
         for i in range(len(embeddings)):
@@ -170,6 +156,8 @@ class UniSTModule(LightningModule):
             dists.append(dist)
         dists_tensor = torch.stack(dists)
         probs = F.softmax(-dists_tensor, dim=1)
+
+        label_ids = torch.tensor(label_ids).to(self.device)
 
         # update and log metrics
         self.test_loss(loss)
@@ -180,15 +168,11 @@ class UniSTModule(LightningModule):
         self.log("test/auprc", self.test_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
     def predict_step(self, batch, batch_idx):
-        inputs = self.net.tokenizer(
-            batch["sentence"],
-            batch["description"],
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
-        ).to("cuda:0")
-        embeddings = self.net.embed(**inputs)
-        labelset_embeddings = self.net.embed(**inputs)
+        input_ids = batch["input_ids"]
+        attention_mask = batch["attention_mask"]
+
+        embeddings = self.net.embed(input_ids, attention_mask)
+        labelset_embeddings = self.net.embed(self.labelset_input_ids, self.labelset_attention_mask)
 
         dists = []
         for i in range(len(embeddings)):
