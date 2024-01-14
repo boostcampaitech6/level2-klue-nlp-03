@@ -53,14 +53,17 @@ class UniSTModule(LightningModule):
             MulticlassAveragePrecision(num_classes=30, average="macro", ignore_index=0) * 100
         )
 
-        # for averaging loss across batches
-        self.train_loss = MeanMetric()
-        self.val_loss = MeanMetric()
-        self.test_loss = MeanMetric()
-
         # for tracking best so far validation metrics (micro_f1, auprc)
         self.val_micro_f1_best = MaxMetric()
         self.val_auprc_best = MaxMetric()
+
+    def convert_to_logits(self, dists):
+        tensor = torch.stack(dists)
+        inverted_tensor = 1 - tensor
+        eps = 1e-6
+        clipped_tensor = torch.clamp(inverted_tensor, 1 - eps)
+        logits = torch.log(clipped_tensor / (1 - clipped_tensor))
+        return logits
 
     def forward(self, inputs):
         return self.net(**inputs)
@@ -68,7 +71,7 @@ class UniSTModule(LightningModule):
     def on_train_start(self) -> None:
         # by default lightning executes validation step sanity checks before training starts,
         # so it's worth to make sure validation metrics don't store results from these checks
-        self.val_loss.reset()
+
         self.val_micro_f1.reset()
         self.val_micro_f1_best.reset()
         self.val_auprc.reset()
@@ -93,15 +96,14 @@ class UniSTModule(LightningModule):
             embedding = embeddings[i].expand(labelset_embeddings.shape)
             dist = self.net.dist_fn(embedding, labelset_embeddings)
             dists.append(dist)
-        dists_tensor = torch.stack(dists)
-        probs = F.softmax(-dists_tensor, dim=1)
+        logits = self.convert_to_logits(dists)
 
         label_ids = torch.tensor(label_ids).to(self.device)
 
         # update and log metrics
         self.train_loss(loss)
-        self.train_micro_f1(probs, label_ids)
-        self.train_auprc(probs, label_ids)
+        self.train_micro_f1(logits, label_ids)
+        self.train_auprc(logits, label_ids)
         self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log(
             "train/micro_f1", self.train_micro_f1, on_step=False, on_epoch=True, prog_bar=True
@@ -123,15 +125,14 @@ class UniSTModule(LightningModule):
             embedding = embeddings[i].expand(labelset_embeddings.shape)
             dist = self.net.dist_fn(embedding, labelset_embeddings)
             dists.append(dist)
-        dists_tensor = torch.stack(dists)
-        probs = F.softmax(-dists_tensor, dim=1)
+        logits = self.convert_to_logits(dists)
 
         label_ids = torch.tensor(label_ids).to(self.device)
 
         # update and log metrics
         self.val_loss(loss)
-        self.val_micro_f1(probs, label_ids)
-        self.val_auprc(probs, label_ids)
+        self.val_micro_f1(logits, label_ids)
+        self.val_auprc(logits, label_ids)
         self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val/micro_f1", self.val_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val/auprc", self.val_auprc, on_step=False, on_epoch=True, prog_bar=True)
@@ -162,15 +163,15 @@ class UniSTModule(LightningModule):
             embedding = embeddings[i].expand(labelset_embeddings.shape)
             dist = self.net.dist_fn(embedding, labelset_embeddings)
             dists.append(dist)
-        dists_tensor = torch.stack(dists)
-        probs = F.softmax(-dists_tensor, dim=1)
+
+        logits = self.convert_to_logits(dists)
 
         label_ids = torch.tensor(label_ids).to(self.device)
 
         # update and log metrics
         self.test_loss(loss)
-        self.test_micro_f1(probs, label_ids)
-        self.test_auprc(probs, label_ids)
+        self.test_micro_f1(logits, label_ids)
+        self.test_auprc(logits, label_ids)
         self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/micro_f1", self.test_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/auprc", self.test_auprc, on_step=False, on_epoch=True, prog_bar=True)
@@ -190,10 +191,9 @@ class UniSTModule(LightningModule):
             embedding = embeddings[i].expand(labelset_embeddings.shape)
             dist = self.net.dist_fn(embedding, labelset_embeddings)
             dists.append(dist)
-        dists_tensor = torch.stack(dists)
-        probs = F.softmax(-dists_tensor, dim=1)
+        logits = self.convert_to_logits(dists)
 
-        return probs
+        return logits
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
