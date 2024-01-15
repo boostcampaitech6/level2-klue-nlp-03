@@ -7,7 +7,15 @@ from datasets import Dataset, load_dataset
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, DataCollatorWithPadding
+from tqdm import tqdm
 
+"""❤@#^"""
+SUB_PUNCT_IN = "ᴥ"
+SUB_PUNCT_OUT = "#"
+OBJ_PUNCT_IN = "@"
+OBJ_PUNCT_OUT = "^"
+SUB_START_PUNCT = SUB_PUNCT_OUT + SUB_PUNCT_IN
+OBJ_START_PUNCT = OBJ_PUNCT_OUT + OBJ_PUNCT_IN
 
 class KLUEDataModule(LightningDataModule):
     def __init__(
@@ -76,67 +84,145 @@ class KLUEDataModule(LightningDataModule):
                 literal_eval(example)["end_idx"] for example in examples["object_entity"]
             ],
         }
-
+    
     def entity_expression(self, examples):
         ko_entity_type = {
             "PER": "사람",
             "ORG": "단체",
             "DAT": "날짜",
             "LOC": "장소",
-            "POH": "본사",
+            "POH": "기타",
             "NOH": "수량",
         }
+        
         return {
             "text": [
-                s[:sesi]
-                + "@ * "
-                + ko_entity_type[set]
-                + " * "
-                + s[sesi : seei + 1]
-                + " @ "
-                + s[seei + 1 : oesi]
-                + " # ^ "
-                + ko_entity_type[oet]
-                + " ^ "
-                + s[oesi : oeei + 1]
-                + " # "
-                + s[oeei + 1 :]
-                if sesi < oesi
-                else s[:oesi]
-                + "# ^ "
-                + ko_entity_type[oet]
-                + " ^ "
-                + s[oesi : oeei + 1]
-                + " # "
-                + s[oeei + 1 : sesi]
-                + "@ * "
-                + ko_entity_type[set]
-                + " * "
-                + s[sesi : seei + 1]
-                + " @ "
-                + s[seei + 1 :]
+                s[:sesi] + SUB_START_PUNCT + ko_entity_type[set] + SUB_PUNCT_IN + s[sesi:seei + 1] + SUB_PUNCT_OUT + s[seei + 1:oesi] + OBJ_PUNCT_OUT + OBJ_PUNCT_IN + ko_entity_type[oet] + OBJ_PUNCT_IN + s[oesi:oeei + 1] + OBJ_PUNCT_OUT + s[oeei + 1:]
+                if sesi < oesi else
+                s[:oesi] + OBJ_START_PUNCT + ko_entity_type[oet] + OBJ_PUNCT_IN + s[oesi:oeei + 1] + OBJ_PUNCT_OUT + s[oeei + 1:sesi] + SUB_PUNCT_OUT + SUB_PUNCT_IN + ko_entity_type[set] + SUB_PUNCT_IN + s[sesi:seei + 1] + SUB_PUNCT_OUT + s[seei + 1:]
                 for s, set, oet, sesi, seei, oesi, oeei in zip(
                     examples["sentence"],
-                    examples["subject_entity_type"],
-                    examples["object_entity_type"],
-                    examples["subject_entity_start_idx"],
-                    examples["subject_entity_end_idx"],
-                    examples["object_entity_start_idx"],
-                    examples["object_entity_end_idx"],
+                    examples["subject_entity_type"], examples["object_entity_type"],
+                    examples["subject_entity_start_idx"], examples["subject_entity_end_idx"],
+                    examples["object_entity_start_idx"], examples["object_entity_end_idx"]
                 )
             ]
         }
 
+    # def entity_expression(self, examples):
+    #     ko_entity_type = {
+    #         "PER": "사람",
+    #         "ORG": "단체",
+    #         "DAT": "날짜",
+    #         "LOC": "장소",
+    #         "POH": "본사",
+    #         "NOH": "수량",
+    #     }
+    #     return {
+    #         "text": [
+    #             s[:sesi]
+    #             + "@*"
+    #             + ko_entity_type[set]
+    #             + "*"
+    #             + s[sesi : seei + 1]
+    #             + "@"
+    #             + s[seei + 1 : oesi]
+    #             + "#^"
+    #             + ko_entity_type[oet]
+    #             + "^"
+    #             + s[oesi : oeei + 1]
+    #             + "#"
+    #             + s[oeei + 1 :]
+    #             if sesi < oesi
+    #             else s[:oesi]
+    #             + "#^"
+    #             + ko_entity_type[oet]
+    #             + "^"
+    #             + s[oesi : oeei + 1]
+    #             + "#"
+    #             + s[oeei + 1 : sesi]
+    #             + "@*"
+    #             + ko_entity_type[set]
+    #             + "*"
+    #             + s[sesi : seei + 1]
+    #             + "@"
+    #             + s[seei + 1 :]
+    #             for s, set, oet, sesi, seei, oesi, oeei in zip(
+    #                 examples["sentence"],
+    #                 examples["subject_entity_type"],
+    #                 examples["object_entity_type"],
+    #                 examples["subject_entity_start_idx"],
+    #                 examples["subject_entity_end_idx"],
+    #                 examples["object_entity_start_idx"],
+    #                 examples["object_entity_end_idx"],
+    #             )
+    #         ]
+    #     }
+
+    def customize_token_type_ids(self, examples):
+        embedding_token_type_ids_list = []
+        sub_idxs = []
+        obj_idxs = []
+        for idx in tqdm(range(len(examples["input_ids"]))):
+            is_sub_start = False
+            is_obj_start = False
+            SUB_TOKEN = 1
+            sub_idx = 600
+            obj_idx = 700
+            OBJ_TOKEN = 2
+            ELSE_TOKEN = 0
+            embedding_token_type_ids = []
+            for i in range(len(examples["input_ids"][idx])):
+                if is_sub_start == True:
+                    sub_idx = min(sub_idx, i - 1)
+                    embedding_token_type_ids[-1] = SUB_TOKEN
+                    embedding_token_type_ids.append(SUB_TOKEN)
+                elif is_obj_start == True:
+                    obj_idx = min(obj_idx, i - 1)
+                    embedding_token_type_ids[-1] = OBJ_TOKEN
+                    embedding_token_type_ids.append(OBJ_TOKEN)
+                else:
+                    embedding_token_type_ids.append(ELSE_TOKEN)
+                
+                if self.tokenizer.decode(examples["input_ids"][idx][i]) == SUB_START_PUNCT:
+                    is_sub_start = not is_sub_start
+                elif self.tokenizer.decode(examples["input_ids"][idx][i]) == OBJ_START_PUNCT:
+                    is_obj_start = not is_obj_start
+                elif self.tokenizer.decode(examples["input_ids"][idx][i]) == SUB_PUNCT_OUT:
+                    is_sub_start = not is_sub_start
+                elif self.tokenizer.decode(examples["input_ids"][idx][i]) == OBJ_PUNCT_OUT:
+                    is_obj_start = not is_obj_start
+
+            if is_sub_start != False or is_obj_start != False:
+                print("error")
+                raise Exception("error")
+
+            embedding_token_type_ids_list.append(embedding_token_type_ids)
+            sub_idxs.append(sub_idx)
+            obj_idxs.append(obj_idx)
+            
+        return {
+            "embedding_token_type_ids_list": embedding_token_type_ids_list,
+            "sub_idxs": sub_idxs,
+            "obj_idxs": obj_idxs,
+        }
+
     def tokenize_function(self, examples):
+        new_tokens = [SUB_START_PUNCT, OBJ_START_PUNCT, SUB_PUNCT_IN, SUB_PUNCT_OUT, OBJ_PUNCT_IN, OBJ_PUNCT_OUT]
+        self.tokenizer.add_tokens(new_tokens)
         return self.tokenizer(examples["text"], truncation=True)
 
     def preprocessing(self, dataset, stage):
         dataset = dataset.map(self.get_word_word_type_and_idxs_from_entity, batched=True)
         dataset = dataset.map(self.entity_expression, batched=True)
         dataset = dataset.map(self.tokenize_function, batched=True)
+        dataset = dataset.map(self.customize_token_type_ids, batched=True)
         dataset = dataset.select_columns(
-            ["input_ids", "token_type_ids", "attention_mask", "label"]
+            ["input_ids", "attention_mask", "token_type_ids", "sub_idxs", "obj_idxs", "label"]
         )
+        # dataset = dataset.select_columns(
+        #     ["input_ids", "token_type_ids", "attention_mask", "label"]
+        # )
         if stage != "predict":
             dataset = dataset.map(self.encode_label_to_id, batched=True)
         else:

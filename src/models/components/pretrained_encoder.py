@@ -4,7 +4,7 @@ from transformers import AutoConfig, AutoModel, AutoModelForSequenceClassificati
 
 # model for Trainer
 class PretrainedEncoder(nn.Module):
-    def __init__(self, model_name, num_labels):
+    def __init__(self, model_name, num_labels, do_prob=0.1):
         super().__init__()
         self.config = AutoConfig.from_pretrained(model_name)
         self.config.num_labels = num_labels

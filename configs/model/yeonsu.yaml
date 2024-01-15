@@ -1,18 +1,19 @@
 _target_: src.models.klue_module.KLUEModule
 
 net:
-  _target_: src.models.components.pretrained_encoder.PretrainedEncoder
+  _target_: src.models.components.yeonsu_encoder.YeonsuEncoder
   model_name: "klue/roberta-large"
   num_labels: 30
 
 loss_fn:
-  _target_: torch.nn.CrossEntropyLoss
-  label_smoothing: 0.0
+  _target_: src.models.components.focal_loss.FocalLoss
+  # label_smoothing: 0.0
 
 optimizer:
   _target_: torch.optim.AdamW
   _partial_: true
-  lr: 0.001
+  lr: 2.306e-6
+  weight_decay: 0.00001
 
 scheduler:
   _target_: torch.optim.lr_scheduler.ReduceLROnPlateau

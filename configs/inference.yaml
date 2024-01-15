@@ -2,8 +2,8 @@
 
 defaults:
   - _self_
-  - data: klue # choose datamodule with `test_dataloader()` for evaluation
-  - model: klue
+  - data: yeonsu # choose datamodule with `test_dataloader()` for evaluation
+  - model: yeonsu
   - logger: null
   - trainer: default
   - paths: default

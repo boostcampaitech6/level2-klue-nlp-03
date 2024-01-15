@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: klue
-  - override /model: klue
+  - override /model: yeonsu
   - override /callbacks: default
   - override /trainer: default
 
@@ -16,27 +16,30 @@ defaults:
 # 실험마다 우리 바꿔줄 것
 # train과 inference 단계에서 동일하게 사용 가능합니다.
 
-tags: ["연수", "klue/bert-base"] # 실험마다 꼭 작성 부탁드려요
+tags: ["연수", "klue/roberta-large-ee-mc"] # 실험마다 꼭 작성 부탁드려요
 
 seed: 42
 
 test: True # Test 진행 여부. 'True'이면 train, validation 외에 추가적으로 test를 진행합니다.
 
 trainer:
-  min_epochs: 5
-  max_epochs: 15
+  min_epochs: 10
+  max_epochs: 10
 
 model:
   net:
     _target_: src.models.components.yeonsu_encoder.YeonsuEncoder
-    model_name: "klue/bert-base"
+    model_name: "klue/roberta-large"
     do_prob: 0.1 # dropout probability
+    num_labels: 30
   loss_fn:
-    _target_: torch.nn.CrossEntropyLoss # 원하는 Loss function으로 변경 가능합니다.
+    _target_: src.models.components.focal_loss.FocalLoss
+    # _target_: torch.nn.CrossEntropyLoss # 원하는 Loss function으로 변경 가능합니다.
 
   optimizer:
     _target_: torch.optim.AdamW # 원하는 Optimizer로 변경 가능합니다.
-    lr: 3e-5
+    lr: 2.306e-6
+    weight_decay: 0.00001
   scheduler:
     _target_: torch.optim.lr_scheduler.ReduceLROnPlateau # 원하는 lr_scheduler로 변경 가능합니다.
     mode: min
@@ -45,10 +48,10 @@ model:
 
 data: # 'data/' 디렉토리에 있는 데이터 입니다.
   _target_: src.data.klue_datamodule_entity_expression.KLUEDataModule
-  file_train: train.csv
-  file_val: val.csv
-  file_test: test.csv
-  batch_size: 32
+  file_train: train_85.csv
+  file_val: dev_10.csv
+  file_test: test_5.csv
+  batch_size: 16
 
 logger:
   wandb:
