@@ -30,7 +30,7 @@ class UniSTModule(LightningModule):
         self.net = AutoModel.from_pretrained(model_name, config=config)
 
         self.margin = margin
-        self.gamma = 1.0
+        self.gamma = 0.1
         self.labelset_input_ids = None
         self.labelset_attention_mask = None
 
@@ -83,32 +83,33 @@ class UniSTModule(LightningModule):
                 torch.nn.init.zeros_(module.bias)
 
     def convert_to_logits(self, dists):
-        dists = torch.stack(dists)
         eps = 1e-6
         clipped_tensor = torch.clamp(dists, 1 - eps)
         logits = torch.log(clipped_tensor / (1 - clipped_tensor))
         return logits
 
     def focal_triplet_loss(self, anchor, pos, neg):
-        base_loss = max(self.dist_fn(anchor, pos) - self.dist(anchor, neg) + self.margin, 0)
+        base_loss = torch.clamp(
+            self.dist_fn(anchor, neg) - self.dist_fn(anchor, pos) + self.margin, min=0
+        )
         hardness = torch.exp(-base_loss)
         focal_triplet_loss = (1 - hardness) ** self.gamma * base_loss
-        return focal_triplet_loss
+        return torch.sum(focal_triplet_loss)
 
     def forward(
         self,
         texts_input_ids,
         labels_input_ids,
-        false_input_ids,
+        fake_input_ids,
         texts_attention_mask=None,
         labels_attention_mask=None,
-        false_attention_mask=None,
+        fake_attention_mask=None,
     ):
         texts_embeddings = self.embed(texts_input_ids, texts_attention_mask)
         labels_embeddings = self.embed(labels_input_ids, labels_attention_mask)
-        false_embeddings = self.embed(false_input_ids, false_attention_mask)
+        fake_embeddings = self.embed(fake_input_ids, fake_attention_mask)
 
-        loss = self.loss_fn(texts_embeddings, false_embeddings, labels_embeddings)
+        loss = self.loss_fn(texts_embeddings, fake_embeddings, labels_embeddings)
 
         return loss, texts_embeddings
 
@@ -127,8 +128,7 @@ class UniSTModule(LightningModule):
 
     def model_step(self, batch):
         inputs = {key: val for key, val in batch.items() if key != "label_ids"}
-        label_ids = torch.as_tensor(batch["label_ids"])
-
+        label_ids = batch["label_ids"]
         loss, embeddings = self.forward(**inputs)
         return loss, embeddings, label_ids
 
@@ -154,21 +154,20 @@ class UniSTModule(LightningModule):
 
     def on_train_epoch_end(self):
         embeddings = torch.cat(self.train_step_embeddings, dim=0)
-        label_ids = torch.cat(self.train_step_labels, dim=0)
+        label_ids = torch.cat(self.train_step_labels, dim=0).to(self.device)
 
         with torch.no_grad():
             labelset_embeddings = self.embed(
                 self.labelset_input_ids.to(self.device),
                 self.labelset_attention_mask.to(self.device),
             )
+            # Batched cosine similarity computation
+            dists = F.cosine_similarity(
+                embeddings.unsqueeze(1), labelset_embeddings.unsqueeze(0), dim=2
+            )
 
-            dists = []
-            for i in range(len(embeddings)):
-                embedding = embeddings[i].expand(labelset_embeddings.shape)
-                dist = F.cosine_similarity(embedding, labelset_embeddings).detach().cpu()
-                dists.append(dist)
-
-            logits = self.convert_to_logits(dists)
+            # Convert distances to logits
+        logits = self.convert_to_logits(dists).to(self.device)
 
         self.train_micro_f1(logits, label_ids)
         self.train_auprc(logits, label_ids)
@@ -192,56 +191,54 @@ class UniSTModule(LightningModule):
 
     def on_validation_epoch_end(self):
         embeddings = torch.cat(self.validation_step_embeddings, dim=0)
-        label_ids = torch.cat(self.validation_step_labels, dim=0)
-        with torch.no_grad():
-            labelset_embeddings = self.embed(
-                self.labelset_input_ids.to(self.device),
-                self.labelset_attention_mask.to(self.device),
-            )
+        label_ids = torch.cat(self.validation_step_labels, dim=0).to(self.device)
+        self.validation_step_embeddings.clear()
+        self.validation_step_labels.clear()
 
-            dists = []
-            for i in range(len(embeddings)):
-                embedding = embeddings[i].expand(labelset_embeddings.shape)
-                dist = F.cosine_similarity(embedding, labelset_embeddings).detach().cpu()
-                dists.append(dist)
+        labelset_embeddings = self.embed(
+            self.labelset_input_ids.to(self.device),
+            self.labelset_attention_mask.to(self.device),
+        )
+        # Batched cosine similarity computation
+        dists = F.cosine_similarity(
+            embeddings.unsqueeze(1), labelset_embeddings.unsqueeze(0), dim=2
+        )
 
-            logits = self.convert_to_logits(dists)
+        # Convert distances to logits
+        logits = self.convert_to_logits(dists).to(self.device)
 
+        # Metric computations
         self.val_micro_f1(logits, label_ids)
         self.val_auprc(logits, label_ids)
         self.log("val/micro_f1", self.val_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val/auprc", self.val_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
-        micro_f1 = self.val_micro_f1.compute()  # get current val micro f1
-        self.val_micro_f1_best(micro_f1)  # update best so far val micro f1
-        auprc = self.val_auprc.compute()  # get current val micro f1
-        self.val_auprc_best(auprc)  # update best so far val micro f1
+        # Best scores
+        micro_f1 = self.val_micro_f1.compute()
+        self.val_micro_f1_best(micro_f1)
+        auprc = self.val_auprc.compute()
+        self.val_auprc_best(auprc)
 
-        # log `val_micro_f1_best` and 'val_auprc_best' as values through `.compute()` method, instead of as a metric object
-        # otherwise metrics would be reset by lightning after each epoch
+        # Log best scores
         self.log(
             "val/micro_f1_best", self.val_micro_f1_best.compute(), sync_dist=True, prog_bar=True
         )
         self.log("val/auprc_best", self.val_auprc_best.compute(), sync_dist=True, prog_bar=True)
-        self.validation_step_embeddings.clear()
-        self.validation_step_labels.clear()
 
     def test_step(self, batch, batch_idx) -> None:
         loss, embeddings, label_ids = self.model_step(batch)
 
-        with torch.no_grad():
-            labelset_embeddings = self.embed(
-                self.labelset_input_ids.to(self.device),
-                self.labelset_attention_mask.to(self.device),
-            )
+        labelset_embeddings = self.embed(
+            self.labelset_input_ids.to(self.device),
+            self.labelset_attention_mask.to(self.device),
+        )
+        # Batched cosine similarity computation
+        dists = F.cosine_similarity(
+            embeddings.unsqueeze(1), labelset_embeddings.unsqueeze(0), dim=2
+        )
 
-            dists = []
-            for i in range(len(embeddings)):
-                embedding = embeddings[i].expand(labelset_embeddings.shape)
-                dist = F.cosine_similarity(embedding, labelset_embeddings).detach().cpu()
-                dists.append(dist)
-
-            logits = self.convert_to_logits(dists)
+        # Convert distances to logits
+        logits = self.convert_to_logits(dists)
 
         # update and log metrics
         self.test_loss(loss)
@@ -256,16 +253,15 @@ class UniSTModule(LightningModule):
         attention_mask = batch["texts_attention_mask"]
 
         embeddings = self.embed(input_ids, attention_mask)
-        with torch.no_grad():
-            labelset_embeddings = self.embed(self.labelset_input_ids, self.labelset_attention_mask)
+        labelset_embeddings = self.embed(self.labelset_input_ids, self.labelset_attention_mask)
 
-            dists = []
-            for i in range(len(embeddings)):
-                embedding = embeddings[i].expand(labelset_embeddings.shape)
-                dist = F.cosine_similarity(embedding, labelset_embeddings).detach().cpu()
-                dists.append(dist)
+        # Batched cosine similarity computation
+        dists = F.cosine_similarity(
+            embeddings.unsqueeze(1), labelset_embeddings.unsqueeze(0), dim=2
+        )
 
-            logits = self.convert_to_logits(dists)
+        # Convert distances to logits
+        logits = self.convert_to_logits(dists.detach().cpu())
 
         return logits
 

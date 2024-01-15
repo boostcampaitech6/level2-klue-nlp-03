@@ -2,6 +2,7 @@ from typing import Any, Dict, Optional
 
 import os
 
+import torch
 from datasets import Dataset, load_dataset
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader
@@ -72,7 +73,7 @@ class UniSTDataModule(LightningDataModule):
                 "texts_attention_mask": collated_texts["attention_mask"],
                 "labels_attention_mask": collated_labels["attention_mask"],
                 "fake_attention_mask": collated_fake["attention_mask"],
-                "label_ids": label_ids,
+                "label_ids": torch.as_tensor(label_ids),
             }
         else:
             return {
