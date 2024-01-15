@@ -30,10 +30,14 @@ class UniSTModule(LightningModule):
         self.net = AutoModel.from_pretrained(model_name, config=config)
 
         self.margin = margin
+        self.gamma = 1.0
         self.labelset_input_ids = None
         self.labelset_attention_mask = None
 
         self.net.apply(self.init_weights)
+
+        self.loss_fn = self.focal_triplet_loss
+        self.dist_fn = torch.nn.CosineSimilarity()
 
         # metrics
         self.train_micro_f1 = (
@@ -85,23 +89,26 @@ class UniSTModule(LightningModule):
         logits = torch.log(clipped_tensor / (1 - clipped_tensor))
         return logits
 
+    def focal_triplet_loss(self, anchor, pos, neg):
+        base_loss = max(self.dist_fn(anchor, pos) - self.dist(anchor, neg) + self.margin, 0)
+        hardness = torch.exp(-base_loss)
+        focal_triplet_loss = (1 - hardness) ** self.gamma * base_loss
+        return focal_triplet_loss
+
     def forward(
         self,
         texts_input_ids,
         labels_input_ids,
-        fake_input_ids,
+        false_input_ids,
         texts_attention_mask=None,
         labels_attention_mask=None,
-        fake_attention_mask=None,
+        false_attention_mask=None,
     ):
         texts_embeddings = self.embed(texts_input_ids, texts_attention_mask)
         labels_embeddings = self.embed(labels_input_ids, labels_attention_mask)
-        fake_embeddings = self.embed(fake_input_ids, fake_attention_mask)
-        loss_fn = torch.nn.TripletMarginWithDistanceLoss(
-            distance_function=lambda x, y: F.cosine_similarity(x, y), margin=self.margin
-        )
+        false_embeddings = self.embed(false_input_ids, false_attention_mask)
 
-        loss = loss_fn(texts_embeddings, fake_embeddings, labels_embeddings)
+        loss = self.loss_fn(texts_embeddings, false_embeddings, labels_embeddings)
 
         return loss, texts_embeddings
 
@@ -118,6 +125,13 @@ class UniSTModule(LightningModule):
 
         return pooled_outputs
 
+    def model_step(self, batch):
+        inputs = {key: val for key, val in batch.items() if key != "label_ids"}
+        label_ids = torch.as_tensor(batch["label_ids"])
+
+        loss, embeddings = self.forward(**inputs)
+        return loss, embeddings, label_ids
+
     def on_train_start(self) -> None:
         # by default lightning executes validation step sanity checks before training starts,
         # so it's worth to make sure validation metrics don't store results from these checks
@@ -126,13 +140,6 @@ class UniSTModule(LightningModule):
         self.val_micro_f1_best.reset()
         self.val_auprc.reset()
         self.val_auprc_best.reset()
-
-    def model_step(self, batch):
-        inputs = {key: val for key, val in batch.items() if key != "label_ids"}
-        label_ids = torch.as_tensor(batch["label_ids"])
-
-        loss, embeddings = self.forward(**inputs)
-        return loss, embeddings, label_ids
 
     def training_step(self, batch, batch_idx):
         loss, embeddings, label_ids = self.model_step(batch)

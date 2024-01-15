@@ -55,25 +55,23 @@ class UniSTDataModule(LightningDataModule):
 
         if "labels" in batch[0].keys():
             labels = [sample["labels"] for sample in batch]
-            falses = [
-                sample["false"] for sample in batch
-            ]  # Assuming 'false' is a key in your data
+            fake = [sample["fake"] for sample in batch]
 
             tokenized_labels = self.tokenizer(labels, max_length=13, truncation=True)
             collated_labels = self.data_collator(tokenized_labels)
 
-            tokenized_false = self.tokenizer(falses, max_length=13, truncation=True)
-            collated_false = self.data_collator(tokenized_false)
+            tokenized_fake = self.tokenizer(fake, max_length=13, truncation=True)
+            collated_fake = self.data_collator(tokenized_fake)
 
             label_ids = [sample["label_ids"] for sample in batch]
 
             return {
                 "texts_input_ids": collated_texts["input_ids"],
                 "labels_input_ids": collated_labels["input_ids"],
-                "false_input_ids": collated_false["input_ids"],
+                "fake_input_ids": collated_fake["input_ids"],
                 "texts_attention_mask": collated_texts["attention_mask"],
                 "labels_attention_mask": collated_labels["attention_mask"],
-                "false_attention_mask": collated_false["attention_mask"],
+                "fake_attention_mask": collated_fake["attention_mask"],
                 "label_ids": label_ids,
             }
         else:

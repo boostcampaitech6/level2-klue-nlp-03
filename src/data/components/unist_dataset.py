@@ -19,7 +19,7 @@ class UniSTDataset(Dataset):
         if not self.is_pred:
             self.dataset = self.dataset.map(self.encode_label_to_id, batched=True)
             self.dataset = self.dataset.map(self.translate_label, batched=True)
-            self.dataset = self.dataset.map(self.get_false_label)
+            self.dataset = self.dataset.map(self.get_fake_label)
 
     def get_entity_dict(self, examples):
         return {
@@ -87,11 +87,11 @@ class UniSTDataset(Dataset):
     def translate_label(self, examples):
         return {"labels": [label_translated[en] for en in examples["label"]]}
 
-    def get_false_label(self, examples):
+    def get_fake_label(self, examples):
         true_label = examples["labels"]
         choices = set(labelset_ko) - {true_label}
-        false_label = random.choice(list(choices))
-        return {"false": false_label}
+        fake_label = random.choice(list(choices))
+        return {"fake": fake_label}
 
     def __len__(self):
         return len(self.dataset)
@@ -102,7 +102,7 @@ class UniSTDataset(Dataset):
         item["description"] = self.dataset[idx]["description"]
         if not self.is_pred:
             item["labels"] = self.dataset[idx]["labels"]
-            item["false"] = self.dataset[idx]["false"]
+            item["fake"] = self.dataset[idx]["fake"]
             item["label_ids"] = self.dataset[idx]["label_ids"]
 
         return item
