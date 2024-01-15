@@ -7,10 +7,9 @@ import torch.nn.functional as F
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification import MulticlassAveragePrecision, MulticlassF1Score
-from transformers import AutoConfig
+from transformers import AutoConfig, AutoModel
 
 from ..data.components.labelsets import labelset_ko
-from .components.unist_model import UniSTModel
 
 
 class UniSTModule(LightningModule):
@@ -28,11 +27,13 @@ class UniSTModule(LightningModule):
         self.save_hyperparameters(logger=False)
 
         config = AutoConfig.from_pretrained(model_name)
-        config.margin = margin
-        self.net = UniSTModel.from_pretrained(model_name, config=config)
+        self.net = AutoModel.from_pretrained(model_name, config=config)
 
+        self.margin = margin
         self.labelset_input_ids = None
         self.labelset_attention_mask = None
+
+        self.net.apply(self.init_weights)
 
         # metrics
         self.train_micro_f1 = (
@@ -70,16 +71,52 @@ class UniSTModule(LightningModule):
         self.validation_step_embeddings = []
         self.validation_step_labels = []
 
+    def init_weights(self, module):
+        if isinstance(module, torch.nn.Linear):
+            torch.nn.init.xavier_uniform_(module.weight)
+            torch.nn.init.zeros_(module.bias)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+
     def convert_to_logits(self, dists):
         dists = torch.stack(dists)
-        inverted_tensor = 1 - dists
         eps = 1e-6
-        clipped_tensor = torch.clamp(inverted_tensor, 1 - eps)
+        clipped_tensor = torch.clamp(dists, 1 - eps)
         logits = torch.log(clipped_tensor / (1 - clipped_tensor))
         return logits
 
-    def forward(self, inputs):
-        return self.net(**inputs)
+    def forward(
+        self,
+        texts_input_ids,
+        labels_input_ids,
+        false_input_ids,
+        texts_attention_mask=None,
+        labels_attention_mask=None,
+        false_attention_mask=None,
+    ):
+        texts_embeddings = self.embed(texts_input_ids, texts_attention_mask)
+        labels_embeddings = self.embed(labels_input_ids, labels_attention_mask)
+        false_embeddings = self.embed(false_input_ids, false_attention_mask)
+        loss_fn = torch.nn.TripletMarginWithDistanceLoss(
+            distance_function=lambda x, y: F.cosine_similarity(x, y), margin=self.margin
+        )
+
+        loss = loss_fn(texts_embeddings, false_embeddings, labels_embeddings)
+
+        return loss, texts_embeddings
+
+    def embed(
+        self,
+        input_ids,
+        attention_mask=None,
+    ):
+        outputs = self.net(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+        pooled_outputs = outputs.get("pooler_output", outputs.last_hidden_state[:, 0])
+
+        return pooled_outputs
 
     def on_train_start(self) -> None:
         # by default lightning executes validation step sanity checks before training starts,
@@ -93,7 +130,8 @@ class UniSTModule(LightningModule):
     def model_step(self, batch):
         inputs = {key: val for key, val in batch.items() if key != "label_ids"}
         label_ids = torch.as_tensor(batch["label_ids"])
-        loss, embeddings = self.forward(inputs)
+
+        loss, embeddings = self.forward(**inputs)
         return loss, embeddings, label_ids
 
     def training_step(self, batch, batch_idx):
@@ -110,11 +148,9 @@ class UniSTModule(LightningModule):
     def on_train_epoch_end(self):
         embeddings = torch.cat(self.train_step_embeddings, dim=0)
         label_ids = torch.cat(self.train_step_labels, dim=0)
-        self.train_step_embeddings.clear()
-        self.train_step_labels.clear()
 
         with torch.no_grad():
-            labelset_embeddings = self.net.embed(
+            labelset_embeddings = self.embed(
                 self.labelset_input_ids.to(self.device),
                 self.labelset_attention_mask.to(self.device),
             )
@@ -122,7 +158,7 @@ class UniSTModule(LightningModule):
             dists = []
             for i in range(len(embeddings)):
                 embedding = embeddings[i].expand(labelset_embeddings.shape)
-                dist = self.net.dist_fn(embedding, labelset_embeddings).detach().cpu()
+                dist = F.cosine_similarity(embedding, labelset_embeddings).detach().cpu()
                 dists.append(dist)
 
             logits = self.convert_to_logits(dists)
@@ -133,6 +169,9 @@ class UniSTModule(LightningModule):
             "train/micro_f1", self.train_micro_f1, on_step=False, on_epoch=True, prog_bar=True
         )
         self.log("train/auprc", self.train_auprc, on_step=False, on_epoch=True, prog_bar=True)
+
+        self.train_step_embeddings.clear()
+        self.train_step_labels.clear()
 
     def validation_step(self, batch, batch_idx) -> None:
         loss, embeddings, label_ids = self.model_step(batch)
@@ -147,10 +186,8 @@ class UniSTModule(LightningModule):
     def on_validation_epoch_end(self):
         embeddings = torch.cat(self.validation_step_embeddings, dim=0)
         label_ids = torch.cat(self.validation_step_labels, dim=0)
-        self.validation_step_embeddings.clear()
-        self.validation_step_labels.clear()
         with torch.no_grad():
-            labelset_embeddings = self.net.embed(
+            labelset_embeddings = self.embed(
                 self.labelset_input_ids.to(self.device),
                 self.labelset_attention_mask.to(self.device),
             )
@@ -158,7 +195,7 @@ class UniSTModule(LightningModule):
             dists = []
             for i in range(len(embeddings)):
                 embedding = embeddings[i].expand(labelset_embeddings.shape)
-                dist = self.net.dist_fn(embedding, labelset_embeddings).detach().cpu()
+                dist = F.cosine_similarity(embedding, labelset_embeddings).detach().cpu()
                 dists.append(dist)
 
             logits = self.convert_to_logits(dists)
@@ -179,12 +216,14 @@ class UniSTModule(LightningModule):
             "val/micro_f1_best", self.val_micro_f1_best.compute(), sync_dist=True, prog_bar=True
         )
         self.log("val/auprc_best", self.val_auprc_best.compute(), sync_dist=True, prog_bar=True)
+        self.validation_step_embeddings.clear()
+        self.validation_step_labels.clear()
 
     def test_step(self, batch, batch_idx) -> None:
         loss, embeddings, label_ids = self.model_step(batch)
 
         with torch.no_grad():
-            labelset_embeddings = self.net.embed(
+            labelset_embeddings = self.embed(
                 self.labelset_input_ids.to(self.device),
                 self.labelset_attention_mask.to(self.device),
             )
@@ -192,7 +231,7 @@ class UniSTModule(LightningModule):
             dists = []
             for i in range(len(embeddings)):
                 embedding = embeddings[i].expand(labelset_embeddings.shape)
-                dist = self.net.dist_fn(embedding, labelset_embeddings).detach().cpu()
+                dist = F.cosine_similarity(embedding, labelset_embeddings).detach().cpu()
                 dists.append(dist)
 
             logits = self.convert_to_logits(dists)
@@ -209,16 +248,14 @@ class UniSTModule(LightningModule):
         input_ids = batch["texts_input_ids"]
         attention_mask = batch["texts_attention_mask"]
 
-        embeddings = self.net.embed(input_ids, attention_mask)
+        embeddings = self.embed(input_ids, attention_mask)
         with torch.no_grad():
-            labelset_embeddings = self.net.embed(
-                self.labelset_input_ids, self.labelset_attention_mask
-            )
+            labelset_embeddings = self.embed(self.labelset_input_ids, self.labelset_attention_mask)
 
             dists = []
             for i in range(len(embeddings)):
                 embedding = embeddings[i].expand(labelset_embeddings.shape)
-                dist = self.net.dist_fn(embedding, labelset_embeddings).detach().cpu()
+                dist = F.cosine_similarity(embedding, labelset_embeddings).detach().cpu()
                 dists.append(dist)
 
             logits = self.convert_to_logits(dists)

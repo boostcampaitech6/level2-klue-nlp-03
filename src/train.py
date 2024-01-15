@@ -47,11 +47,8 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     labelset_input_ids = datamodule.labelset_input_ids
     labelset_attention_mask = datamodule.labelset_attention_mask
-    print("*" * 100, "input_ids", labelset_input_ids)
-    print("*" * 100, "attention mask", labelset_attention_mask)
-    print("*" * 100, "len tokenizer", len(datamodule.tokenizer))
-    # model.setup()
-    # model.net.model.resize_token_embeddings(len(datamodule.tokenizer))
+
+    model.net.resize_token_embeddings(len(datamodule.tokenizer))
     model.labelset_input_ids = labelset_input_ids
     model.labelset_attention_mask = labelset_attention_mask
 
