@@ -27,10 +27,6 @@ class SemanticTypingDataModule(LightningDataModule):
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        special_tokens_dict = {
-            "additional_special_tokens": ["<SUBJ>", "</SUBJ>", "<OBJ>", "</OBJ>", "<RELATION>"]
-        }
-        self.tokenizer.add_special_tokens(special_tokens_dict)
         self.data_collator = DataCollatorWithPadding(tokenizer=self.tokenizer, return_tensors="pt")
 
         self.data_train: Optional[Dataset] = None
