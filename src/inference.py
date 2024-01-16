@@ -11,6 +11,8 @@ from lightning import LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 
+from data.components.labelsets import label2id
+
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 from src.utils import RankedLogger, extras, instantiate_loggers, log_hyperparameters, task_wrapper
@@ -36,6 +38,8 @@ def inference(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(cfg.trainer, logger=logger)
 
+    model.plm.resize_token_embeddings(len(datamodule.tokenizer))
+
     object_dict = {
         "cfg": cfg,
         "datamodule": datamodule,
@@ -50,13 +54,14 @@ def inference(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     log.info("Starting Inference!")
     logits = trainer.predict(model=model, dataloaders=predict_dataloader, ckpt_path=cfg.ckpt_path)
-
-    id2label = pd.read_pickle(cfg.paths.data_dir + "id2label.pkl")
-
-    logits = torch.concat(logits).detach().cpu()
+    print("*" * 100, "logits", logits)
+    logits = torch.cat(logits, dim=0).detach().cpu()
+    print("*" * 100, "logits shape", logits.shape)
+    logits = logits.float()
     probs = torch.nn.functional.softmax(logits, dim=1)
     preds = torch.argmax(probs, dim=1)
-    pred_label = [id2label[int(idx)] for idx in preds]
+    named_labels = list(label2id.keys())
+    pred_label = [named_labels[idx] for idx in preds]
     output = pd.DataFrame(
         {"id": range(len(pred_label)), "pred_label": pred_label, "probs": probs.tolist()}
     )

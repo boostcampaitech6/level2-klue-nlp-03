@@ -2,10 +2,14 @@ from typing import Any, Dict, Tuple
 
 import torch
 import torch.nn as nn
+import wandb
 from lightning import LightningModule
+from lightning.pytorch.loggers.wandb import WandbLogger
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification import MulticlassAveragePrecision, MulticlassF1Score
 from transformers import AutoConfig, AutoModel
+
+from ..data.components.labelsets import label2id
 
 
 class SemanticTypingModule(LightningModule):
@@ -33,7 +37,7 @@ class SemanticTypingModule(LightningModule):
         )
 
         # weight initialization
-        self._init_weights(self.classifier)
+        self.classifier.apply(self._init_weights)
 
         # loss functions
         self.criterion = loss_fn
@@ -138,8 +142,16 @@ class SemanticTypingModule(LightningModule):
         )
         self.log("val/auprc_best", self.val_auprc_best.compute(), sync_dist=True, prog_bar=True)
 
+    def on_test_start(self):
+        if isinstance(self.logger, WandbLogger):
+            self.test_logits = []
+            self.test_targets = []
+
     def test_step(self, batch, batch_idx) -> None:
         loss, logits, targets = self.model_step(batch)
+        if isinstance(self.logger, WandbLogger):
+            self.test_logits.append(logits)
+            self.test_targets.append(targets)
 
         # update and log metrics
         self.test_loss(loss)
@@ -149,10 +161,38 @@ class SemanticTypingModule(LightningModule):
         self.log("test/micro_f1", self.test_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/auprc", self.test_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
+    def on_test_end(self):
+        if isinstance(self.logger, WandbLogger):
+            named_labels = list(label2id.keys())
+            logits = torch.cat(self.test_logits, dim=0)
+            targets = torch.cat(self.test_targets, dim=0)
+
+            probs = torch.nn.functional.softmax(logits, dim=1)
+            preds = torch.argmax(probs, dim=1)
+
+            targets_np, probs_np, preds_np = (
+                targets.cpu().numpy(),
+                probs.cpu().numpy(),
+                preds.cpu().numpy(),
+            )
+
+            wandb.log(
+                {
+                    "precision_recall_curve": wandb.sklearn.plot_precision_recall(
+                        targets_np, probs_np, named_labels
+                    )
+                }
+            )
+            wandb.log(
+                {
+                    "confusion_matrix": wandb.sklearn.plot_confusion_matrix(
+                        targets_np, preds_np, named_labels
+                    )
+                }
+            )
+
     def predict_step(self, batch, batch_idx):
-        inputs = {key: val for key, val in batch.items() if key != "labels"}
-        logits = self.forward(**inputs)
-        return self.multiclass_head(logits)
+        return self.forward(**batch)
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())

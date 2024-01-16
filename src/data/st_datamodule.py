@@ -44,9 +44,8 @@ class SemanticTypingDataModule(LightningDataModule):
     def collate_fn(self, batch):
         sentences = [sample["sentence"] for sample in batch]
         descriptions = [sample["description"] for sample in batch]
-        print("*" * 100, "description", descriptions[0])
-        sent_tokenized = self.tokenizer(sentences, max_length=256, truncation=True)
-        desc_tokenized = self.tokenizer(descriptions, max_length=256, truncation=True)
+        sent_tokenized = self.tokenizer(sentences, truncation=True)
+        desc_tokenized = self.tokenizer(descriptions, truncation=True)
 
         sent_collated = self.data_collator(sent_tokenized)
         desc_collated = self.data_collator(desc_tokenized)
