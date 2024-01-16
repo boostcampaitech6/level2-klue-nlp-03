@@ -10,13 +10,11 @@ class SemanticTypingDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, is_pred=False):
         assert isinstance(dataset, datasets.Dataset)
 
-        self.dataset = dataset.map(self.get_entity_dict, batched=True, load_from_cache_file=False)
-        self.dataset = self.dataset.map(self.describe_task, load_from_cache_file=False)
+        self.dataset = dataset.map(self.get_entity_dict, batched=True)
+        self.dataset = self.dataset.map(self.describe_task)
         self.is_pred = is_pred
         if not self.is_pred:
-            self.dataset = self.dataset.map(
-                self.encode_label_to_id, batched=True, load_from_cache_file=False
-            )
+            self.dataset = self.dataset.map(self.encode_label_to_id, batched=True)
 
     def get_entity_dict(self, examples):
         return {

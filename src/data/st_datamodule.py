@@ -39,9 +39,7 @@ class SemanticTypingDataModule(LightningDataModule):
 
     def collate_fn(self, batch):
         sentences = [sample["sentence"] for sample in batch]
-        print("*" * 100, "sentence", sentences[0])
         descriptions = [sample["description"] for sample in batch]
-        print("*" * 100, "description", descriptions[0])
         sent_tokenized = self.tokenizer(sentences, truncation=True)
         desc_tokenized = self.tokenizer(descriptions, truncation=True)
 
