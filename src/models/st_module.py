@@ -177,16 +177,12 @@ class SemanticTypingModule(LightningModule):
             )
 
             wandb.log(
-                {
-                    "precision_recall_curve": wandb.sklearn.plot_precision_recall(
-                        targets_np, probs_np, named_labels
-                    )
-                }
+                {"precision_recall_curve": wandb.plot.pr_curve(targets_np, probs_np, named_labels)}
             )
             wandb.log(
                 {
-                    "confusion_matrix": wandb.sklearn.plot_confusion_matrix(
-                        targets_np, preds_np, named_labels
+                    "confusion_matrix": wandb.plot.confusion_matrix(
+                        targets_np, preds_np, named_labels, normalize="true"
                     )
                 }
             )

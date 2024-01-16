@@ -24,7 +24,7 @@ callbacks:
 # 실험마다 우리 바꿔줄 것
 # train과 inference 단계에서 동일하게 사용 가능합니다.
 
-tags: ["진기", "klue/roberta-base", "TEST"] # 실험마다 꼭 작성 부탁드려요
+tags: ["진기", "snunlp/KR-ELECTRA-discriminator", "Semantic Typing"] # 실험마다 꼭 작성 부탁드려요
 
 seed: 7024
 
@@ -37,19 +37,19 @@ trainer:
   # accumulate_grad_batches: 1
 
 model:
-  model_name: "klue/roberta-base"
-  do_prob: 0.2
+  model_name: "snunlp/KR-ELECTRA-discriminator"
+  do_prob: 0.3
   loss_fn:
     alpha: 1.0
-    gamma: 2.0
+    gamma: 3.0
   optimizer:
     lr: 3e-5
     eps: 1e-6
 
 data: # 'data/' 디렉토리에 있는 데이터 입니다.
-  file_train: train_80.csv
-  file_val: dev_10.csv
-  file_test: test_10.csv
+  file_train: train.csv
+  file_val: dev.csv
+  file_test: test.csv
   batch_size: 128
 
 logger:
