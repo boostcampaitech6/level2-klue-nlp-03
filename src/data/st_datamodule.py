@@ -27,6 +27,10 @@ class SemanticTypingDataModule(LightningDataModule):
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        special_tokens_dict = {
+            "additional_special_tokens": ["<SUBJ>", "</SUBJ>", "<OBJ>", "</OBJ>"]
+        }
+        self.tokenizer.add_special_tokens(special_tokens_dict)
         self.data_collator = DataCollatorWithPadding(tokenizer=self.tokenizer, return_tensors="pt")
 
         self.data_train: Optional[Dataset] = None
@@ -40,6 +44,7 @@ class SemanticTypingDataModule(LightningDataModule):
     def collate_fn(self, batch):
         sentences = [sample["sentence"] for sample in batch]
         descriptions = [sample["description"] for sample in batch]
+        # print("*"*100, sentences[0])
         sent_tokenized = self.tokenizer(sentences, truncation=True)
         desc_tokenized = self.tokenizer(descriptions, truncation=True)
 

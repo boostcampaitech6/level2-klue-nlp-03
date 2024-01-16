@@ -38,6 +38,8 @@ def inference(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(cfg.trainer, logger=logger)
 
+    model.plm.resize_token_embeddings(len(datamodule.tokenizer))
+
     object_dict = {
         "cfg": cfg,
         "datamodule": datamodule,
