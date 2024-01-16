@@ -182,7 +182,7 @@ class SemanticTypingModule(LightningModule):
             wandb.log(
                 {
                     "confusion_matrix": wandb.plot.confusion_matrix(
-                        targets_np, preds_np, named_labels, normalize="true"
+                        targets_np, preds_np, named_labels
                     )
                 }
             )
