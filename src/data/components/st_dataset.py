@@ -40,37 +40,9 @@ class SemanticTypingDataset(Dataset):
         ot = type_translated[ot]
 
         if ss < os:
-            sent = (
-                examples["sentence"][:ss]
-                + "<SUBJ> "
-                + st
-                + " "
-                + examples["sentence"][ss:se]
-                + " </SUBJ>"
-                + examples["sentence"][se:os]
-                + "<OBJ> "
-                + ot
-                + " "
-                + examples["sentence"][os:oe]
-                + " </OBJ>"
-                + examples["sentence"][oe:]
-            )
+            sent = f"{examples['sentence'][:ss]} <SUBJ> @ ❤ {st} ❤ {examples['sentence'][ss:se]} @ </SUBJ> {examples['sentence'][se:os]} <OBJ> ^ # {ot} # {examples['sentence'][os:oe]} ^ </OBJ> {examples['sentence'][oe:]}"
         else:
-            sent = (
-                examples["sentence"][:os]
-                + "<OBJ> "
-                + ot
-                + " "
-                + examples["sentence"][os:oe]
-                + " </OBJ>"
-                + examples["sentence"][oe:ss]
-                + "<SUBJ> "
-                + st
-                + " "
-                + examples["sentence"][ss:se]
-                + " </SUBJ>"
-                + examples["sentence"][se:]
-            )
+            sent = f"{examples['sentence'][:os]} <OBJ> ^ # {ot} # {examples['sentence'][os:oe]} ^ </OBJ> {examples['sentence'][oe:ss]} <SUBJ> @ ❤ {st} ❤ {examples['sentence'][ss:se]} @ </SUBJ> {examples['sentence'][se:]}"
 
         desc = f"<SUBJ> {st} {sw} </SUBJ>와(과) <OBJ> {ot} {ow} </OBJ>사이의 <RELATION>를 설명하시오."
 
