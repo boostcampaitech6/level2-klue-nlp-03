@@ -155,6 +155,7 @@ configs/experiment/*.yaml
 !configs/experiment/jingi.yaml
 !configs/experiment/yeonsu.yaml
 !configs/experiment/stacking.yaml
+!configs/experiment/semantic_typing_exp.yaml
 /logs/
 .env
 
