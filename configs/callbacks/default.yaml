@@ -15,7 +15,7 @@ model_checkpoint:
   enable_version_counter: False
 
 early_stopping:
-  monitor: "val/micro_f1"
+  monitor: "val/micro_f1_best"
   patience: 3
   mode: "max"
 

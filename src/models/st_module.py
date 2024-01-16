@@ -168,21 +168,20 @@ class SemanticTypingModule(LightningModule):
             targets = torch.cat(self.test_targets, dim=0)
 
             probs = torch.nn.functional.softmax(logits, dim=1)
-            preds = torch.argmax(probs, dim=1)
 
-            targets_np, probs_np, preds_np = (
-                targets.cpu().numpy(),
-                probs.cpu().numpy(),
-                preds.cpu().numpy(),
-            )
+            targets_np, probs_np = targets.cpu().numpy(), probs.cpu().numpy()
 
             wandb.log(
-                {"precision_recall_curve": wandb.plot.pr_curve(targets_np, probs_np, named_labels)}
+                {
+                    "precision_recall_curve": wandb.plot.pr_curve(
+                        y_true=targets_np, y_probas=probs_np, labels=named_labels
+                    )
+                }
             )
             wandb.log(
                 {
                     "confusion_matrix": wandb.plot.confusion_matrix(
-                        targets_np, preds_np, named_labels
+                        probs=probs_np, y_true=targets_np, class_names=named_labels
                     )
                 }
             )

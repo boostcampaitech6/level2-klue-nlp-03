@@ -10,14 +10,14 @@ defaults:
   - override /paths: semantic_typing_paths
   - override /hydra: semantic_typing_hydra
 
-  # Inference하실 때 주석처리 해주세요 ###########################
-  - override /callbacks: default
-callbacks:
-  early_stopping:
-    patience: 10
+#   # Inference하실 때 주석처리 해주세요 ###########################
+#   - override /callbacks: default
+# callbacks:
+#   early_stopping:
+#     patience: 10
 
 # Inference하실 때 주석처리 해제해주세요 ###########################
-# ckpt_path: ${paths.log_dir}train/runs/${model.model_name}/checkpoints/best_model.ckpt
+ckpt_path: ${paths.log_dir}train/runs/${model.model_name}/checkpoints/best_model.ckpt
 
 # --------------------------------------------------------------------------------------------
 
