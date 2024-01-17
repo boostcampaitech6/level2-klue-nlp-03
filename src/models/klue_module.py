@@ -162,7 +162,7 @@ class KLUEModule(LightningModule):
             )
             wandb.log(
                 {
-                    "confusion_matrix": wandb.sklearn.plot.confusion_matrix(
+                    "confusion_matrix": wandb.sklearn.plot_confusion_matrix(
                         targets_np, preds_np, named_labels
                     )
                 }
@@ -174,7 +174,11 @@ class KLUEModule(LightningModule):
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
         if self.hparams.scheduler is not None:
-            scheduler = self.hparams.scheduler(optimizer=optimizer)
+            scheduler = self.hparams.scheduler(
+                optimizer=optimizer,
+                num_warmup_steps=0.1 * self.total_steps,
+                num_training_steps=self.total_steps,
+            )
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
@@ -184,6 +188,12 @@ class KLUEModule(LightningModule):
                 },
             }
         return {"optimizer": optimizer}
+
+    def setup(self, stage=None):
+        if stage == "fit":
+            self.total_steps = self.trainer.max_epochs * len(
+                self.trainer.datamodule.train_dataloader()
+            )
 
 
 if __name__ == "__main__":
