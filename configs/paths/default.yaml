@@ -16,4 +16,4 @@ output_dir: ${hydra:runtime.output_dir}
 work_dir: ${hydra:runtime.cwd}
 
 # path to prediction directory
-predict_dir: ${paths.root_dir}/prediction/${model.net.model_name}/
+predict_dir: ${paths.root_dir}/prediction/${model.model_name}/

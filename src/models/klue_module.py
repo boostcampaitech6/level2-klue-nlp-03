@@ -1,15 +1,20 @@
 from typing import Any, Dict, Tuple
 
 import torch
+import wandb
 from lightning import LightningModule
+from lightning.pytorch.loggers.wandb import WandbLogger
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification import MulticlassAveragePrecision, MulticlassF1Score
+from transformers import AutoConfig, AutoModelForSequenceClassification
+
+from ..data.components.labelsets import label2id
 
 
 class KLUEModule(LightningModule):
     def __init__(
         self,
-        net: torch.nn.Module = None,
+        model_name: str = "klue/bert-base",
         loss_fn: torch.nn.Module = None,
         optimizer: torch.optim.Optimizer = None,
         scheduler: torch.optim.lr_scheduler = None,
@@ -19,8 +24,9 @@ class KLUEModule(LightningModule):
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
         self.save_hyperparameters(logger=False)
-
-        self.net = net
+        config = AutoConfig.from_pretrained(model_name)
+        config.num_labels = 30
+        self.plm = AutoModelForSequenceClassification.from_pretrained(model_name, config=config)
 
         # loss function
         self.criterion = loss_fn
@@ -55,7 +61,7 @@ class KLUEModule(LightningModule):
         self.val_auprc_best = MaxMetric()
 
     def forward(self, **inputs):
-        return self.net(**inputs)
+        return self.plm(**inputs).logits
 
     def on_train_start(self) -> None:
         # by default lightning executes validation step sanity checks before training starts,
@@ -113,8 +119,16 @@ class KLUEModule(LightningModule):
         )
         self.log("val/auprc_best", self.val_auprc_best.compute(), sync_dist=True, prog_bar=True)
 
+    def on_test_start(self):
+        if isinstance(self.logger, WandbLogger):
+            self.test_logits = []
+            self.test_targets = []
+
     def test_step(self, batch, batch_idx) -> None:
         loss, logits, targets = self.model_step(batch)
+        if isinstance(self.logger, WandbLogger):
+            self.test_logits.append(logits)
+            self.test_targets.append(targets)
 
         # update and log metrics
         self.test_loss(loss)
@@ -124,24 +138,62 @@ class KLUEModule(LightningModule):
         self.log("test/micro_f1", self.test_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/auprc", self.test_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
+    def on_test_end(self):
+        if isinstance(self.logger, WandbLogger):
+            named_labels = list(label2id.keys())
+            logits = torch.cat(self.test_logits, dim=0)
+            targets = torch.cat(self.test_targets, dim=0)
+
+            probs = torch.nn.functional.softmax(logits, dim=1)
+            preds = torch.argmax(probs, dim=1)
+
+            targets_np, probs_np, preds_np = (
+                targets.cpu().numpy(),
+                probs.cpu().numpy(),
+                preds.cpu().numpy(),
+            )
+
+            wandb.log(
+                {
+                    "precision_recall_curve": wandb.plot.pr_curve(
+                        y_true=targets_np, y_probas=probs_np, labels=named_labels
+                    )
+                }
+            )
+            wandb.log(
+                {
+                    "confusion_matrix": wandb.sklearn.plot.confusion_matrix(
+                        targets_np, preds_np, named_labels
+                    )
+                }
+            )
+
     def predict_step(self, batch, batch_idx):
-        inputs = {key: val for key, val in batch.items() if key != "labels"}
-        return self.forward(**inputs)
+        return self.forward(**batch)
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
         if self.hparams.scheduler is not None:
-            scheduler = self.hparams.scheduler(optimizer=optimizer)
+            scheduler = self.hparams.scheduler(
+                optimizer=optimizer,
+                num_warmup_steps=0.1 * self.total_steps,
+                num_training_steps=self.total_steps,
+            )
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": scheduler,
                     "monitor": "val/loss",
                     "interval": "epoch",
-                    "frequency": 1,
                 },
             }
         return {"optimizer": optimizer}
+
+    def setup(self, stage=None):
+        if stage == "fit":
+            self.total_steps = self.trainer.max_epochs * len(
+                self.trainer.datamodule.train_dataloader()
+            )
 
 
 if __name__ == "__main__":

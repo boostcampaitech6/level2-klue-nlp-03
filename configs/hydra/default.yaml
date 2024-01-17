@@ -7,9 +7,9 @@ defaults:
 
 # output directory, generated dynamically on each run
 run:
-  dir: ${paths.log_dir}/${task_name}/runs/${model.net.model_name}
+  dir: ${paths.log_dir}/${task_name}/runs/${model.model_name}
 sweep:
-  dir: ${paths.log_dir}/${task_name}/multiruns/${model.net.model_name}
+  dir: ${paths.log_dir}/${task_name}/multiruns/${model.model_name}
   subdir: ${hydra.job.num}
 
 job_logging:

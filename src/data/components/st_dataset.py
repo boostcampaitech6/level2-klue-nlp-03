@@ -42,9 +42,9 @@ class SemanticTypingDataset(torch.utils.data.Dataset):
         ot = type_translated[ot]
 
         if ss < os:
-            sent = f"{examples['sentence'][:ss]} <SUBJ> @ ❤ {st} ❤ {examples['sentence'][ss:se]} @ </SUBJ> {examples['sentence'][se:os]} <OBJ> ^ # {ot} # {examples['sentence'][os:oe]} ^ </OBJ> {examples['sentence'][oe:]}"
+            sent = f"{examples['sentence'][:ss]} @ ❤ {st} ❤ {examples['sentence'][ss:se]} @ {examples['sentence'][se:os]} ^ # {ot} # {examples['sentence'][os:oe]} ^ {examples['sentence'][oe:]}"
         else:
-            sent = f"{examples['sentence'][:os]} <OBJ> ^ # {ot} # {examples['sentence'][os:oe]} ^ </OBJ> {examples['sentence'][oe:ss]} <SUBJ> @ ❤ {st} ❤ {examples['sentence'][ss:se]} @ </SUBJ> {examples['sentence'][se:]}"
+            sent = f"{examples['sentence'][:os]} ^ # {ot} # {examples['sentence'][os:oe]} ^ {examples['sentence'][oe:ss]} @ ❤ {st} ❤ {examples['sentence'][ss:se]} @ {examples['sentence'][se:]}"
 
         desc = f"{sw}와 {ow}의 관계는 {st}과 {ot}의 관계이다."
 
