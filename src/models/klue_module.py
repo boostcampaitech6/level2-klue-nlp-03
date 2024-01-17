@@ -174,11 +174,7 @@ class KLUEModule(LightningModule):
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
         if self.hparams.scheduler is not None:
-            scheduler = self.hparams.scheduler(
-                optimizer=optimizer,
-                num_warmup_steps=0.1 * self.total_steps,
-                num_training_steps=self.total_steps,
-            )
+            scheduler = self.hparams.scheduler(optimizer=optimizer)
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
@@ -188,12 +184,6 @@ class KLUEModule(LightningModule):
                 },
             }
         return {"optimizer": optimizer}
-
-    def setup(self, stage=None):
-        if stage == "fit":
-            self.total_steps = self.trainer.max_epochs * len(
-                self.trainer.datamodule.train_dataloader()
-            )
 
 
 if __name__ == "__main__":

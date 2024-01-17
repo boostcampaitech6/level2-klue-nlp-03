@@ -14,5 +14,8 @@ optimizer:
   lr: 3e-5
 
 scheduler:
-  _target_: transformers.get_linear_schedule_with_warmup
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
   _partial_: true
+  mode: min
+  factor: 0.1
+  patience: 10
