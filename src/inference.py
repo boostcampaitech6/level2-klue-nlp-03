@@ -54,9 +54,7 @@ def inference(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     log.info("Starting Inference!")
     logits = trainer.predict(model=model, dataloaders=predict_dataloader, ckpt_path=cfg.ckpt_path)
-    print("*" * 100, "logits", logits)
     logits = torch.cat(logits, dim=0).detach().cpu()
-    print("*" * 100, "logits shape", logits.shape)
     logits = logits.float()
     probs = torch.nn.functional.softmax(logits, dim=1)
     preds = torch.argmax(probs, dim=1)

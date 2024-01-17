@@ -24,9 +24,9 @@ defaults:
 # 실험마다 우리 바꿔줄 것
 # train과 inference 단계에서 동일하게 사용 가능합니다.
 
-tags: ["진기", "snunlp/KR-ELECTRA-discriminator", "RBERT"] # 실험마다 꼭 작성 부탁드려요
+tags: ["이름", "klue/roberta-base", "RBERT"] # 실험마다 꼭 작성 부탁드려요
 
-seed: 7024
+seed: 777
 
 test: True # Test 진행 여부. 'True'이면 train, validation 외에 추가적으로 test를 진행합니다.
 
@@ -37,7 +37,7 @@ trainer:
   # accumulate_grad_batches: 1
 
 model:
-  model_name: "snunlp/KR-ELECTRA-discriminator"
+  model_name: "klue/roberta-base"
   dropout_rate: 0.3
 
   optimizer:
