@@ -51,9 +51,9 @@ class RBERT(PreTrainedModel):
         avg_vector = sum_vector.float() / length_tensor.float()  # broadcasting
         return avg_vector
 
-    def forward(self, input_ids, attention_mask, token_type_ids, subject_mask, object_mask):
+    def forward(self, input_ids, attention_mask, subject_mask, object_mask):
         outputs = self.plm(
-            input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
+            input_ids=input_ids, attention_mask=attention_mask
         )  # sequence_output, pooled_output, (hidden_states), (attentions)
         sequence_output = outputs.last_hidden_state
         cls_output = outputs.get("pooler_output", outputs.last_hidden_state[:, 0])  # [CLS]

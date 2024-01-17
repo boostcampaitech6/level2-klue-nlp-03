@@ -53,7 +53,6 @@ class RBERTDataModule(LightningDataModule):
         tokenized = self.tokenizer(sentences, descriptions, max_length=256, truncation=True)
 
         input_trimmed = [id[:-1] for id in tokenized["input_ids"]]
-        token_type_trimmed = [tid[:-1] for tid in tokenized["token_type_ids"]]
         attention_trimmed = [am[:-1] for am in tokenized["attention_mask"]]
 
         max_length = max(len(am) for am in attention_trimmed)
@@ -84,7 +83,6 @@ class RBERTDataModule(LightningDataModule):
 
         batch_preprocessed = {
             "input_ids": input_trimmed,
-            "token_type_ids": token_type_trimmed,
             "attention_mask": attention_trimmed,
             "subject_mask": subject_mask,
             "object_mask": object_mask,
