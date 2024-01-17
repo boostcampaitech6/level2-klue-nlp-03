@@ -166,7 +166,7 @@ class RBERTModule(LightningModule):
             )
             wandb.log(
                 {
-                    "confusion_matrix": wandb.sklearn.plot.confusion_matrix(
+                    "confusion_matrix": wandb.sklearn.plot_confusion_matrix(
                         targets_np, preds_np, named_labels
                     )
                 }
