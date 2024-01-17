@@ -48,7 +48,7 @@ data: # 'data/' 디렉토리에 있는 데이터 입니다.
   file_train: train.csv
   file_val: dev.csv
   file_test: test.csv
-  batch_size: 64
+  batch_size: 48
 
 logger:
   wandb:
