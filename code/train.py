@@ -88,7 +88,7 @@ def train():
   added_token_num = tokenizer.add_special_tokens({"additional_special_tokens":["[LOC]", "[DAT]", "[NOH]", "[PER]", "[ORG]", "[POH]"]})
 
   # load dataset
-  train_dataset = load_data("../data/train/new_train.csv")
+  train_dataset = load_data("../data/new_train.csv")
   # dev_dataset = load_data("../dataset/train/dev.csv") # validation용 데이터는 따로 만드셔야 합니다.
 
   train_label = label_to_num(train_dataset['label'].values)
@@ -149,14 +149,13 @@ def train():
 
   # train model
   trainer.train()
-  torch.save(model.state_dict(), os.path.join('./best_model', f'monolog_electra_{seed_value}.bin'))
+  torch.save(model.state_dict(), os.path.join('./best_model', f'kobigbird-roberta_{seed_value}.bin'))
 
 def main():
   train()
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
-  parser.add_argument("--criterion", type=str, default='default', help='criterion type: label_smoothing, default')
 
   args = parser.parse_args()
   print(args)
