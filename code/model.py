@@ -1,23 +1,28 @@
 import torch.nn as nn
-from transformers import AutoModel, AutoModelForSequenceClassification, AutoConfig
+import torch
+from transformers import AutoConfig, AutoModel, AutoModelForSequenceClassification
 
+class RobertaBiLSTM(nn.Module):
+    def __init__(self, MODEL_NAME):
+        super().__init__()
+        self.model_config = AutoConfig.from_pretrained(MODEL_NAME)
+        self.model_config.num_labels = 30
+        self.model = AutoModel.from_pretrained(MODEL_NAME, config=self.model_config)
+        self.hidden_dim = self.model_config.hidden_size
+        self.lstm = nn.LSTM(input_size=self.hidden_dim, hidden_size=self.hidden_dim, num_layers=1, batch_first=True, bidirectional=True)
+        self.fc = nn.Linear(self.hidden_dim * 2, self.model_config.num_labels)
 
-# model for Trainer
-class Model(nn.Module):
-    def __init__(self, model_name, num_labels):
-        super(Model, self).__init__()
-        self.config = AutoConfig.from_pretrained(model_name)
-        self.config.num_labels = num_labels
-        self.plm = AutoModelForSequenceClassification.from_pretrained(model_name, config=self.config)
-        self.loss = nn.CrossEntropyLoss()
-        self.save_pretrained = self.plm.save_pretrained
+    def forward(self, input_ids, attention_mask, token_type_ids, labels=None):
+        output = self.model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids).last_hidden_state
+        hidden, (last_hidden, last_cell) = self.lstm(output)
+        output = torch.cat((last_hidden[0], last_hidden[1]), dim=1)
+        logits = self.fc(output)
 
-    def forward(self, input_ids, attention_mask, labels=None, **kwargs):
-        outputs = self.plm(input_ids, attention_mask=attention_mask, **kwargs)
         if labels is not None:
-            loss = self.loss(outputs.logits, labels)
-            return {'loss': loss, 'logits': outputs.logits }
-        return {'logits': outputs.logits }
-
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.model_config.num_labels), labels.view(-1))
+            return {'loss': loss, 'logits': logits}
+        else:
+            return {'logits': logits}
 
         
