@@ -81,9 +81,9 @@ def train():
   # load model and tokenizer
   # MODEL_NAME = "bert-base-uncased"
   # MODEL_NAME = "klue/bert-base"
-  # MODEL_NAME = "klue/roberta-large"
-  # MODEL_NAME = "monologg/koelectra-base-v3-discriminator"
-  MODEL_NAME = "vaiv/kobigbird-roberta-large"
+  MODEL_NAME = "klue/roberta-large"
+  # MODEL_NAME = "xlm-roberta-large"
+  # MODEL_NAME = "vaiv/kobigbird-roberta-large"
   tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
   added_token_num = tokenizer.add_special_tokens({"additional_special_tokens":["[LOC]", "[DAT]", "[NOH]", "[PER]", "[ORG]", "[POH]"]})
 
@@ -112,32 +112,6 @@ def train():
 
   model.to(device)
   
-  # 사용한 option 외에도 다양한 option들이 있습니다.
-  # https://huggingface.co/transformers/main_classes/trainer.html#trainingarguments 참고해주세요.
-  # training_args = TrainingArguments(
-  #   output_dir='./results',          # output directory
-  #   save_strategy='no',
-  #   save_total_limit=1,              # number of total save model.
-  #   num_train_epochs=1,              # total number of training epochs
-  #   learning_rate=3e-5,               # learning_rate
-  #   per_device_train_batch_size=64,  # batch size per device during training
-  #   gradient_accumulation_steps=2,   # gradient accumulation factor
-  #   per_device_eval_batch_size=64,   # batch size for evaluation
-  #   fp16=True,
-  #   warmup_ratio = 0.1,
-  #   weight_decay=0.01,               # strength of weight decay
-  #   label_smoothing_factor=0.1,
-  #   # lr_scheduler_type = 'cosine',
-  #   logging_dir='./logs',            # directory for storing logs
-  #   logging_steps=100,              # log saving step.
-  #   evaluation_strategy='steps', # evaluation strategy to adopt during training
-  #                               # `no`: No evaluation during training.
-  #                               # `steps`: Evaluate every `eval_steps`.
-  #                               # `epoch`: Evaluate every end of epoch.
-  #   load_best_model_at_end = True,
-  #   report_to = 'wandb',
-  #   evaluation_strategy='steps' 
-  # )
   training_args = TrainingArguments(
     output_dir='./results',         
     save_strategy='steps',          # Change this to 'steps' or 'epoch'
@@ -156,7 +130,7 @@ def train():
     evaluation_strategy='steps',    # Keep this aligned with save_strategy
     load_best_model_at_end=True,    # Now this should work fine
     report_to='wandb'
-)
+  )
 
   trainer = Trainer(
       model=model,                         # the instantiated 🤗 Transformers model to be trained
@@ -169,7 +143,7 @@ def train():
 
   # train model
   trainer.train()
-  torch.save(model.state_dict(), os.path.join('./best_model', f'vaiv-kobigbird_{seed_value}.bin'))
+  torch.save(model.state_dict(), os.path.join('./best_model', f'roberta-large2_{seed_value}.bin'))
 
 def main():
   train()

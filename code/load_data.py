@@ -25,7 +25,7 @@ def preprocessing_dataset_with_sentence(dataset : pd.DataFrame):
   sentence = []
   for S_WORD,S_TYPE,O_WORD,O_TYPE,SEN in zip(dataset['subj_word'], dataset['subj_type'], dataset['obj_word'], dataset['obj_type'], dataset['sentence']): 
     
-    S_TEMP = ' '.join(['@', '♥', '['+S_TYPE+']', '♥', S_WORD, '@'])
+    S_TEMP = ' '.join(['@', '*', '['+S_TYPE+']', '*', S_WORD, '@'])
     subject_entity.append(S_TEMP)
   
     O_TEMP = ' '.join(['#', '^', '['+O_TYPE+']', '^', O_WORD, '#'])
