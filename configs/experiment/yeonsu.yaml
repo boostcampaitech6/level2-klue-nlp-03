@@ -16,15 +16,16 @@ defaults:
 # 실험마다 우리 바꿔줄 것
 # train과 inference 단계에서 동일하게 사용 가능합니다.
 
-tags: ["연수", "klue/roberta-large-ee-mc"] # 실험마다 꼭 작성 부탁드려요
+tags: ["연수", "klue/roberta-large-ee-mc-focal"] # 실험마다 꼭 작성 부탁드려요
 
 seed: 42
 
 test: True # Test 진행 여부. 'True'이면 train, validation 외에 추가적으로 test를 진행합니다.
 
 trainer:
-  min_epochs: 10
-  max_epochs: 10
+  min_epochs: 6
+  max_epochs: 6
+  gradient_clip_val: 1
 
 model:
   net:
@@ -33,13 +34,13 @@ model:
     do_prob: 0.1 # dropout probability
     num_labels: 30
   loss_fn:
-    _target_: src.models.components.focal_loss.FocalLoss
-    # _target_: torch.nn.CrossEntropyLoss # 원하는 Loss function으로 변경 가능합니다.
+    # _target_: src.models.components.focal_loss.FocalLoss
+    _target_: torch.nn.CrossEntropyLoss # 원하는 Loss function으로 변경 가능합니다.
 
   optimizer:
     _target_: torch.optim.AdamW # 원하는 Optimizer로 변경 가능합니다.
     lr: 2.306e-6
-    weight_decay: 0.00001
+    
   scheduler:
     _target_: torch.optim.lr_scheduler.ReduceLROnPlateau # 원하는 lr_scheduler로 변경 가능합니다.
     mode: min
@@ -47,10 +48,10 @@ model:
     patience: 10
 
 data: # 'data/' 디렉토리에 있는 데이터 입니다.
-  _target_: src.data.klue_datamodule_entity_expression.KLUEDataModule
-  file_train: train_85.csv
-  file_val: dev_10.csv
-  file_test: test_5.csv
+  _target_: src.data.st_datamodule.KLUEDataModule
+  file_train: train.csv
+  file_val: dev_10_relation.csv
+  file_test: test_5_relation.csv
   batch_size: 16
 
 logger:
