@@ -9,12 +9,18 @@ class FCLayer(nn.Module):
         self.use_activation = use_activation
         self.dropout = nn.Dropout(dropout_rate)
         self.linear = nn.Linear(input_dim, output_dim)
-        self.tanh = nn.Tanh()
+        self.gelu = nn.GELU()
+        if self.use_activation:
+            nn.init.normal_(self.linear.weight)
+        else:
+            nn.init.kaiming_normal_(self.linear.weight, mode="fan_in", nonlinearity="relu")
+        if self.linear.bias is not None:
+            nn.init.zeros_(self.linear.bias)
 
     def forward(self, x):
         x = self.dropout(x)
         if self.use_activation:
-            x = self.tanh(x)
+            x = self.gelu(x)
         return self.linear(x)
 
 

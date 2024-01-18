@@ -46,7 +46,7 @@ class RBERTDataset(torch.utils.data.Dataset):
         else:
             sent = f"{examples['sentence'][:os]} <OBJ> {ot} {examples['sentence'][os:oe]} </OBJ> {examples['sentence'][oe:ss]} <SUBJ> {st} {examples['sentence'][ss:se]} </SUBJ> {examples['sentence'][se:]}"
 
-        desc = f"{sw}와 {ow}의 관계는 {st}과 {ot}의 관계이다."
+        desc = f"{st} {sw}와 {ot} {ow}의 관계를 설명하세요."
 
         return {"sentence": sent, "description": desc}
 

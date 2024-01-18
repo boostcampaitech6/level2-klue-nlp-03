@@ -31,7 +31,7 @@ seed: 777
 test: True # Test 진행 여부. 'True'이면 train, validation 외에 추가적으로 test를 진행합니다.
 
 trainer:
-  min_epochs: 20
+  min_epochs: 0
   max_epochs: 200
   gradient_clip_val: 1.
   # accumulate_grad_batches: 1

@@ -17,9 +17,9 @@ class RBERTDataModule(LightningDataModule):
         model_name: str = "klue/roberta-base",
         data_dir: str = "data/",
         file_train: str = "train.csv",
-        file_val: str = "valid.csv",
+        file_val: str = "dev.csv",
         file_test: str = "test.csv",
-        file_pred: str = "predict.csv",
+        file_pred: str = "test_data.csv",
         batch_size: int = 64,
     ) -> None:
         super().__init__()

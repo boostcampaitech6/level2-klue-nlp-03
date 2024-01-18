@@ -181,7 +181,7 @@ class RBERTModule(LightningModule):
         if self.hparams.scheduler is not None:
             scheduler = self.hparams.scheduler(
                 optimizer=optimizer,
-                num_warmup_steps=0.1 * self.total_steps,
+                num_warmup_steps=0.05 * self.total_steps,
                 num_training_steps=self.total_steps,
             )
             return {
