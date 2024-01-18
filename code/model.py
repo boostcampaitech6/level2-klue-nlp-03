@@ -12,8 +12,8 @@ class RobertaBiLSTM(nn.Module):
         self.lstm = nn.LSTM(input_size=self.hidden_dim, hidden_size=self.hidden_dim, num_layers=1, batch_first=True, bidirectional=True)
         self.fc = nn.Linear(self.hidden_dim * 2, self.model_config.num_labels)
 
-    def forward(self, input_ids, attention_mask, token_type_ids, labels=None):
-        output = self.model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids).last_hidden_state
+    def forward(self, input_ids, attention_mask, labels=None):
+        output = self.model(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
         hidden, (last_hidden, last_cell) = self.lstm(output)
         output = torch.cat((last_hidden[0], last_hidden[1]), dim=1)
         logits = self.fc(output)

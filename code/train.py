@@ -11,8 +11,6 @@ import wandb
 from model import RobertaBiLSTM
 import random
 import argparse
-from loss import *
-
 
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -84,7 +82,8 @@ def train():
   # MODEL_NAME = "bert-base-uncased"
   # MODEL_NAME = "klue/bert-base"
   # MODEL_NAME = "klue/roberta-large"
-  MODEL_NAME = "monologg/koelectra-base-v3-discriminator"
+  # MODEL_NAME = "monologg/koelectra-base-v3-discriminator"
+  MODEL_NAME = "vaiv/kobigbird-roberta-large"
   tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
   added_token_num = tokenizer.add_special_tokens({"additional_special_tokens":["[LOC]", "[DAT]", "[NOH]", "[PER]", "[ORG]", "[POH]"]})
 
