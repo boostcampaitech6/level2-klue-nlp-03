@@ -92,13 +92,13 @@ class RBERTModule(LightningModule):
         try:
             self.train_micro_f1(logits, targets)
             self.train_auprc(logits, targets)
-            self.log(
-                "train/micro_f1", self.train_micro_f1, on_step=False, on_epoch=True, prog_bar=True
-            )
-            self.log("train/auprc", self.train_auprc, on_step=False, on_epoch=True, prog_bar=True)
         except Exception as e:
             print(f"Error occurred during train metric calculation: {e}")
 
+        self.log(
+            "train/micro_f1", self.train_micro_f1, on_step=False, on_epoch=True, prog_bar=True
+        )
+        self.log("train/auprc", self.train_auprc, on_step=False, on_epoch=True, prog_bar=True)
         # return loss or backpropagation will fail
         return loss
 
@@ -111,12 +111,11 @@ class RBERTModule(LightningModule):
         try:
             self.val_micro_f1(logits, targets)
             self.val_auprc(logits, targets)
-            self.log(
-                "val/micro_f1", self.val_micro_f1, on_step=False, on_epoch=True, prog_bar=True
-            )
-            self.log("val/auprc", self.val_auprc, on_step=False, on_epoch=True, prog_bar=True)
         except Exception as e:
             print(f"Error occurred during validation metric calculation: {e}")
+
+        self.log("val/micro_f1", self.val_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val/auprc", self.val_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
     def on_validation_epoch_end(self) -> None:
         try:
@@ -128,17 +127,15 @@ class RBERTModule(LightningModule):
             # log `val_micro_f1_best` and 'val_auprc_best' as values through `.compute()` method, instead of as a metric object
             # otherwise metrics would be reset by lightning after each epoch
 
-            self.log(
-                "val/micro_f1_best",
-                self.val_micro_f1_best.compute(),
-                sync_dist=True,
-                prog_bar=True,
-            )
-            self.log(
-                "val/auprc_best", self.val_auprc_best.compute(), sync_dist=True, prog_bar=True
-            )
         except Exception as e:
             print(f"Error occurred during validation epoch metric calculation: {e}")
+        self.log(
+            "val/micro_f1_best",
+            self.val_micro_f1_best.compute(),
+            sync_dist=True,
+            prog_bar=True,
+        )
+        self.log("val/auprc_best", self.val_auprc_best.compute(), sync_dist=True, prog_bar=True)
 
     def on_test_start(self):
         if isinstance(self.logger, WandbLogger):
@@ -157,12 +154,10 @@ class RBERTModule(LightningModule):
             # update and log metrics
             self.test_micro_f1(logits, targets)
             self.test_auprc(logits, targets)
-            self.log(
-                "test/micro_f1", self.test_micro_f1, on_step=False, on_epoch=True, prog_bar=True
-            )
-            self.log("test/auprc", self.test_auprc, on_step=False, on_epoch=True, prog_bar=True)
         except Exception as e:
             print(f"Error occurred during test metric calculation: {e}")
+        self.log("test/micro_f1", self.test_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("test/auprc", self.test_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
     def on_test_end(self):
         if isinstance(self.logger, WandbLogger):
