@@ -42,11 +42,11 @@ class RBERTDataset(torch.utils.data.Dataset):
         ot = type_translated[ot]
 
         if ss < os:
-            sent = f"{examples['sentence'][:ss]} <SUBJ> {st} {examples['sentence'][ss:se]} </SUBJ> {examples['sentence'][se:os]} <OBJ> {ot} {examples['sentence'][os:oe]} </OBJ> {examples['sentence'][oe:]}"
+            sent = f"{examples['sentence'][:ss]} <SUBJ> @ ❤ {st} ❤ {examples['sentence'][ss:se]} @ </SUBJ> {examples['sentence'][se:os]} <OBJ> ^ # {ot} # {examples['sentence'][os:oe]} ^ </OBJ> {examples['sentence'][oe:]}"
         else:
-            sent = f"{examples['sentence'][:os]} <OBJ> {ot} {examples['sentence'][os:oe]} </OBJ> {examples['sentence'][oe:ss]} <SUBJ> {st} {examples['sentence'][ss:se]} </SUBJ> {examples['sentence'][se:]}"
+            sent = f"{examples['sentence'][:os]} <OBJ> ^ # {ot} # {examples['sentence'][os:oe]} ^ </OBJ> {examples['sentence'][oe:ss]} <SUBJ> @ ❤ {st} ❤ {examples['sentence'][ss:se]} @ </SUBJ> {examples['sentence'][se:]}"
 
-        desc = f"{st} {sw}와 {ot} {ow}의 관계를 설명하세요."
+        desc = f"{st} {sw}와 {ot} {ow}의 관계"
 
         return {"sentence": sent, "description": desc}
 
