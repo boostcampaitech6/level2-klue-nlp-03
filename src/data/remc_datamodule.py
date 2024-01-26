@@ -175,6 +175,14 @@ class KLUEDataModule(LightningDataModule):
             "sub_idxs": sub_idxs,
             "obj_idxs": obj_idxs,
         }
+    
+    def guidance(self, examples):
+        return {
+            "attn_guide" : [
+                1 if example in MINOR_LABELS else 0
+                for example in examples["label"]
+            ]
+        }
 
     def tokenize_function(self, examples):
         # new_tokens = [SUB_PUNCT_IN, SUB_PUNCT_OUT, OBJ_PUNCT_IN, OBJ_PUNCT_OUT]
@@ -186,6 +194,7 @@ class KLUEDataModule(LightningDataModule):
         dataset = dataset.map(self.semantic_typing, batched=True)
         dataset = dataset.map(self.tokenize_function, batched=True)
         dataset = dataset.map(self.customize_token_type_ids, batched=True)
+        dataset = dataset.map(self.guidance, batched=True)
         dataset = dataset.select_columns(
             ["input_ids", "attention_mask", "token_type_ids", "sub_idxs", "obj_idxs", "label"]
         )
