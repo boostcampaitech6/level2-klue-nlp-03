@@ -17,6 +17,15 @@ OBJ_PUNCT_OUT = "^"
 SUB_START_PUNCT = SUB_PUNCT_OUT + SUB_PUNCT_IN
 OBJ_START_PUNCT = OBJ_PUNCT_OUT + OBJ_PUNCT_IN
 
+ko_entity_type = {
+    "PER": "사람",
+    "ORG": "단체",
+    "DAT": "날짜",
+    "LOC": "장소",
+    "POH": "기타",
+    "NOH": "수량",
+}
+
 class KLUEDataModule(LightningDataModule):
     def __init__(
         self,
@@ -85,28 +94,19 @@ class KLUEDataModule(LightningDataModule):
             ],
         }
     
-    def entity_expression(self, examples):
-        ko_entity_type = {
-            "PER": "사람",
-            "ORG": "단체",
-            "DAT": "날짜",
-            "LOC": "장소",
-            "POH": "기타",
-            "NOH": "수량",
-        }
-        
+    def semantic_typing(self, examples):
         return {
-            "text": [
-                s[:sesi] + SUB_START_PUNCT + ko_entity_type[set] + SUB_PUNCT_IN + s[sesi:seei + 1] + SUB_PUNCT_OUT + s[seei + 1:oesi] + OBJ_PUNCT_OUT + OBJ_PUNCT_IN + ko_entity_type[oet] + OBJ_PUNCT_IN + s[oesi:oeei + 1] + OBJ_PUNCT_OUT + s[oeei + 1:]
+            "desc": [
+                f"{SUB_START_PUNCT} {ko_entity_type[set]} {SUB_PUNCT_IN} {s[sesi:seei + 1]} {SUB_PUNCT_OUT} 과 + {OBJ_START_PUNCT} {ko_entity_type[oet]} {OBJ_PUNCT_IN} {s[oesi:oeei + 1]} {OBJ_PUNCT_OUT} 의 관계는 무엇인가?"
                 if sesi < oesi else
-                s[:oesi] + OBJ_START_PUNCT + ko_entity_type[oet] + OBJ_PUNCT_IN + s[oesi:oeei + 1] + OBJ_PUNCT_OUT + s[oeei + 1:sesi] + SUB_PUNCT_OUT + SUB_PUNCT_IN + ko_entity_type[set] + SUB_PUNCT_IN + s[sesi:seei + 1] + SUB_PUNCT_OUT + s[seei + 1:]
+                f"{OBJ_START_PUNCT} {ko_entity_type[oet]} {OBJ_PUNCT_IN} {s[oesi:oeei + 1]} {OBJ_PUNCT_OUT} 과 + {SUB_START_PUNCT} {ko_entity_type[set]} {SUB_PUNCT_IN} {s[sesi:seei + 1]} {SUB_PUNCT_OUT} 의 관계는 무엇인가?"
                 for s, set, oet, sesi, seei, oesi, oeei in zip(
                     examples["sentence"],
                     examples["subject_entity_type"], examples["object_entity_type"],
                     examples["subject_entity_start_idx"], examples["subject_entity_end_idx"],
                     examples["object_entity_start_idx"], examples["object_entity_end_idx"]
-                )
-            ]
+                )     
+            ],
         }
 
     def customize_token_type_ids(self, examples):
@@ -160,11 +160,23 @@ class KLUEDataModule(LightningDataModule):
     def tokenize_function(self, examples):
         # new_tokens = [SUB_PUNCT_IN, SUB_PUNCT_OUT, OBJ_PUNCT_IN, OBJ_PUNCT_OUT]
         # self.tokenizer.add_tokens(new_tokens)
-        return self.tokenizer(examples["text"], truncation=True)
+        # return self.tokenizer(examples["desc"] ,examples["sentence"], truncation=True)
+        tokenized = self.tokenizer(examples["desc"] ,examples["sentence"], truncation=True)
+        return {
+            "input_ids": [
+                input_id[:-1] for input_id in tokenized["input_ids"]
+            ],
+            "attention_mask": [
+                att[:-1] for att in tokenized["attention_mask"]
+            ],
+            "token_type_ids": [
+                tti[:-1] for tti in tokenized["token_type_ids"]
+            ]
+        }
 
     def preprocessing(self, dataset, stage):
         dataset = dataset.map(self.get_word_word_type_and_idxs_from_entity, batched=True)
-        dataset = dataset.map(self.entity_expression, batched=True)
+        dataset = dataset.map(self.semantic_typing, batched=True)
         dataset = dataset.map(self.tokenize_function, batched=True)
         dataset = dataset.map(self.customize_token_type_ids, batched=True)
         dataset = dataset.select_columns(
