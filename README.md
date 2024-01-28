@@ -12,6 +12,7 @@
 ## Description
 
 <!-- 설명 쓰기 -->
+본 프로젝트의 주제인 관계 추출(Relation Extraction, RE)는 문장 내의 두 개체 사이의 관계를 추출하는 작업입니다. 프로젝트를 수행하기 위해 저희 팀에서는 한국어 자연어 이해 벤치마크 데이터셋인 KLUE(Korean Language Understanding Evaluation)의 RE 데이터셋에 Hugging Face에서 제공하는 사전 학습 모델들을 활용하여 문장 속 단어들의 관계를 30개의 관계 클래스로 분류하는 모델을 만들었습니다. 
 
 ## Installation
 
