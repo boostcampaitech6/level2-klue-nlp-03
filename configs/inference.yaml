@@ -9,6 +9,7 @@ defaults:
   - paths: default
   - extras: default
   - hydra: default
+  - experiment: null
 
 task_name: "inference"
 
