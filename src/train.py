@@ -45,6 +45,8 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger)
 
+    model.net.plm.resize_token_embeddings(len(datamodule.tokenizer))
+
     object_dict = {
         "cfg": cfg,
         "datamodule": datamodule,
@@ -61,13 +63,9 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     if cfg.get("train"):
         log.info("Starting training!")
         datamodule.setup("fit")
-        train_dataloader = datamodule.train_dataloader()
-        val_dataloader = datamodule.val_dataloader()
-
         trainer.fit(
             model=model,
-            train_dataloaders=train_dataloader,
-            val_dataloaders=val_dataloader,
+            datamodule=datamodule,
             ckpt_path=cfg.get("ckpt_path"),
         )
 
@@ -76,12 +74,11 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     if cfg.get("test"):
         log.info("Starting testing!")
         datamodule.setup("test")
-        test_dataloader = datamodule.test_dataloader()
         ckpt_path = trainer.checkpoint_callback.best_model_path
         if ckpt_path == "":
             log.warning("Best ckpt not found! Using current weights for testing...")
             ckpt_path = None
-        trainer.test(model=model, dataloaders=test_dataloader, ckpt_path=ckpt_path)
+        trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
         log.info(f"Best ckpt path: {ckpt_path}")
 
     test_metrics = trainer.callback_metrics

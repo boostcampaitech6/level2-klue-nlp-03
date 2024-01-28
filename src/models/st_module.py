@@ -1,17 +1,23 @@
 from typing import Any, Dict, Tuple
 
 import torch
+import torch.nn as nn
+import wandb
 from lightning import LightningModule
+from lightning.pytorch.loggers.wandb import WandbLogger
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification import MulticlassAveragePrecision, MulticlassF1Score
+from transformers import AutoConfig, AutoModel
+
+from ..data.components.labelsets import label2id
 
 
-class StackingModule(LightningModule):
+class SemanticTypingModule(LightningModule):
     def __init__(
         self,
-        net: torch.nn.Module = None,
-        binary_loss_fn: torch.nn.Module = None,
-        multiclass_loss_fn: torch.nn.Module = None,
+        model_name: str = "klue/roberta-base",
+        do_prob: float = 0.2,
+        loss_fn: torch.nn.Module = None,
         optimizer: torch.optim.Optimizer = None,
         scheduler: torch.optim.lr_scheduler = None,
     ) -> None:
@@ -20,21 +26,21 @@ class StackingModule(LightningModule):
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
         self.save_hyperparameters(logger=False)
-
-        self.net = net
-        self.binary_head = torch.nn.Linear(self.net.config.hidden_size, 2)
-        self.multiclass_head = torch.nn.Linear(self.net.config.hidden_size, 30)
+        config = AutoConfig.from_pretrained(model_name)
+        self.plm = AutoModel.from_pretrained(model_name, config=config)
+        self.classifier = nn.Sequential(
+            nn.Dropout(do_prob),
+            nn.Linear(self.plm.config.hidden_size * 2, self.plm.config.hidden_size),
+            nn.GELU(),
+            nn.Dropout(do_prob),
+            nn.Linear(self.plm.config.hidden_size, 30),
+        )
 
         # weight initialization
-        self._init_weights(self.binary_head)
-        self._init_weights(self.multiclass_head)
+        self.classifier.apply(self._init_weights)
 
         # loss functions
-        self.binary_criterion = binary_loss_fn
-        self.multiclass_criterion = multiclass_loss_fn
-
-        # loss sclaes for combining two losses
-        self.loss_scales = torch.nn.Parameter(torch.ones(2))
+        self.criterion = loss_fn
 
         # metrics
         self.train_micro_f1 = (
@@ -46,7 +52,6 @@ class StackingModule(LightningModule):
         self.test_micro_f1 = (
             MulticlassF1Score(num_classes=30, average="micro", ignore_index=0) * 100
         )
-
         self.train_auprc = (
             MulticlassAveragePrecision(num_classes=30, average="macro", ignore_index=0) * 100
         )
@@ -67,12 +72,19 @@ class StackingModule(LightningModule):
         self.val_auprc_best = MaxMetric()
 
     def _init_weights(self, module):
-        if isinstance(module, torch.nn.Linear):
-            torch.nn.init.xavier_uniform_(module.weight)
-            torch.nn.init.zeros_(module.bias)
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight)
+            nn.init.zeros_(module.bias)
 
-    def forward(self, **inputs):
-        return self.net(**inputs)
+    def forward(self, sent_input_ids, sent_attention_mask, desc_input_ids, desc_attention_mask):
+        sent_outputs = self.plm(input_ids=sent_input_ids, attention_mask=sent_attention_mask)
+        desc_outputs = self.plm(input_ids=desc_input_ids, attention_mask=desc_attention_mask)
+        sent_poopled = sent_outputs.get("pooler_output", sent_outputs.last_hidden_state[:, 0])
+        desc_poopled = desc_outputs.get("pooler_output", desc_outputs.last_hidden_state[:, 0])
+
+        head_inputs = torch.cat((sent_poopled, desc_poopled), dim=-1)
+        logits = self.classifier(head_inputs)
+        return logits
 
     def on_train_start(self) -> None:
         # by default lightning executes validation step sanity checks before training starts,
@@ -87,23 +99,8 @@ class StackingModule(LightningModule):
         inputs = {key: val for key, val in batch.items() if key != "labels"}
         targets = batch["labels"]
         logits = self.forward(**inputs)
-
-        # if the label is 'no_relation', it would be 1 else 0
-        is_no_relation = torch.where(targets == 0, 1, 0)
-
-        # binary classification phase
-        binary_logits = self.binary_head(logits)
-        binary_loss = self.binary_criterion(binary_logits, is_no_relation)
-
-        # multiclass classification phase
-        multiclass_logits = self.multiclass_head(logits)
-        multiclass_loss = self.multiclass_criterion(multiclass_logits, targets)
-
-        # combining two losses
-        scales = torch.softmax(self.loss_scales, dim=0)
-        total_loss = scales[0] * binary_loss + scales[1] * multiclass_loss
-
-        return total_loss, multiclass_logits, targets
+        loss = self.criterion(logits, targets)
+        return loss, logits, targets
 
     def training_step(self, batch, batch_idx):
         loss, logits, targets = self.model_step(batch)
@@ -145,8 +142,16 @@ class StackingModule(LightningModule):
         )
         self.log("val/auprc_best", self.val_auprc_best.compute(), sync_dist=True, prog_bar=True)
 
+    def on_test_start(self):
+        if isinstance(self.logger, WandbLogger):
+            self.test_logits = []
+            self.test_targets = []
+
     def test_step(self, batch, batch_idx) -> None:
         loss, logits, targets = self.model_step(batch)
+        if isinstance(self.logger, WandbLogger):
+            self.test_logits.append(logits)
+            self.test_targets.append(targets)
 
         # update and log metrics
         self.test_loss(loss)
@@ -156,26 +161,63 @@ class StackingModule(LightningModule):
         self.log("test/micro_f1", self.test_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/auprc", self.test_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
+    def on_test_end(self):
+        if isinstance(self.logger, WandbLogger):
+            named_labels = list(label2id.keys())
+            logits = torch.cat(self.test_logits, dim=0)
+            targets = torch.cat(self.test_targets, dim=0)
+
+            probs = torch.nn.functional.softmax(logits, dim=1)
+            preds = torch.argmax(probs, dim=1)
+
+            targets_np, probs_np, preds_np = (
+                targets.cpu().numpy(),
+                probs.cpu().numpy(),
+                preds.cpu().numpy(),
+            )
+
+            wandb.log(
+                {
+                    "precision_recall_curve": wandb.plot.pr_curve(
+                        y_true=targets_np, y_probas=probs_np, labels=named_labels
+                    )
+                }
+            )
+            wandb.log(
+                {
+                    "confusion_matrix": wandb.sklearn.plot.confusion_matrix(
+                        targets_np, preds_np, named_labels
+                    )
+                }
+            )
+
     def predict_step(self, batch, batch_idx):
-        inputs = {key: val for key, val in batch.items() if key != "labels"}
-        logits = self.forward(**inputs)
-        return self.multiclass_head(logits)
+        return self.forward(**batch)
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
         if self.hparams.scheduler is not None:
-            scheduler = self.hparams.scheduler(optimizer=optimizer)
+            scheduler = self.hparams.scheduler(
+                optimizer=optimizer,
+                num_warmup_steps=0.1 * self.total_steps,
+                num_training_steps=self.total_steps,
+            )
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": scheduler,
                     "monitor": "val/loss",
                     "interval": "epoch",
-                    "frequency": 1,
                 },
             }
         return {"optimizer": optimizer}
 
+    def setup(self, stage=None):
+        if stage == "fit":
+            self.total_steps = self.trainer.max_epochs * len(
+                self.trainer.datamodule.train_dataloader()
+            )
+
 
 if __name__ == "__main__":
-    _ = StackingModule()
+    _ = SemanticTypingModule()

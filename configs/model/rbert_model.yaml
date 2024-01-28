@@ -1,0 +1,20 @@
+_target_: src.models.rbert_module.RBERTModule
+
+model_name: "klue/roberta-base"
+
+dropout_rate: 0.1
+
+loss_fn:
+  _target_: torch.nn.CrossEntropyLoss
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 3e-5
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.1
+  patience: 10

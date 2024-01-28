@@ -8,10 +8,11 @@ from lightning import LightningDataModule
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, DataCollatorWithPadding
 
-from .components.st_dataset import SemanticTypingDataset
+from .components.labelsets import labelset_ko
+from .components.unist_dataset import UniSTDataset
 
 
-class SemanticTypingDataModule(LightningDataModule):
+class UniSTDataModule(LightningDataModule):
     def __init__(
         self,
         model_name: str = "klue/roberta-base",
@@ -33,6 +34,11 @@ class SemanticTypingDataModule(LightningDataModule):
         self.tokenizer.add_special_tokens(special_tokens_dict)
         self.data_collator = DataCollatorWithPadding(tokenizer=self.tokenizer, return_tensors="pt")
 
+        tokenized_labelset = self.tokenizer(labelset_ko, truncation=True, max_length=13)
+        collated_labelset = self.data_collator(tokenized_labelset)
+        self.labelset_input_ids = collated_labelset["input_ids"]
+        self.labelset_attention_mask = collated_labelset["attention_mask"]
+
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
         self.data_test: Optional[Dataset] = None
@@ -44,25 +50,36 @@ class SemanticTypingDataModule(LightningDataModule):
     def collate_fn(self, batch):
         sentences = [sample["sentence"] for sample in batch]
         descriptions = [sample["description"] for sample in batch]
-        # print("*"*100, sentences[0])
-        sent_tokenized = self.tokenizer(sentences, truncation=True)
-        desc_tokenized = self.tokenizer(descriptions, truncation=True)
 
-        sent_collated = self.data_collator(sent_tokenized)
-        desc_collated = self.data_collator(desc_tokenized)
-
-        batch_preprocessed = {
-            "sent_input_ids": sent_collated["input_ids"],
-            "desc_input_ids": desc_collated["input_ids"],
-            "sent_attention_mask": sent_collated["attention_mask"],
-            "desc_attention_mask": desc_collated["attention_mask"],
-        }
+        tokenized_texts = self.tokenizer(sentences, descriptions, max_length=256, truncation=True)
+        collated_texts = self.data_collator(tokenized_texts)
 
         if "labels" in batch[0].keys():
             labels = [sample["labels"] for sample in batch]
-            batch_preprocessed["labels"] = torch.as_tensor(labels)
+            fake = [sample["fake"] for sample in batch]
 
-        return batch_preprocessed
+            tokenized_labels = self.tokenizer(labels, max_length=13, truncation=True)
+            collated_labels = self.data_collator(tokenized_labels)
+
+            tokenized_fake = self.tokenizer(fake, max_length=13, truncation=True)
+            collated_fake = self.data_collator(tokenized_fake)
+
+            label_ids = [sample["label_ids"] for sample in batch]
+
+            return {
+                "texts_input_ids": collated_texts["input_ids"],
+                "labels_input_ids": collated_labels["input_ids"],
+                "fake_input_ids": collated_fake["input_ids"],
+                "texts_attention_mask": collated_texts["attention_mask"],
+                "labels_attention_mask": collated_labels["attention_mask"],
+                "fake_attention_mask": collated_fake["attention_mask"],
+                "label_ids": torch.as_tensor(label_ids),
+            }
+        else:
+            return {
+                "texts_input_ids": collated_texts["input_ids"],
+                "texts_attention_mask": collated_texts["attention_mask"],
+            }
 
     def setup(self, stage: Optional[str] = None) -> None:
         if stage == "fit" or stage is None:
@@ -79,8 +96,8 @@ class SemanticTypingDataModule(LightningDataModule):
                 split="validation",
             )
 
-            self.data_train = SemanticTypingDataset(ds_train)
-            self.data_val = SemanticTypingDataset(ds_val)
+            self.data_train = UniSTDataset(ds_train)
+            self.data_val = UniSTDataset(ds_val)
 
         elif stage == "test" or stage is None:
             ds_test = load_dataset(
@@ -89,7 +106,7 @@ class SemanticTypingDataModule(LightningDataModule):
                 data_files={"test": self.hparams.file_test},
                 split="test",
             )
-            self.data_test = SemanticTypingDataset(ds_test)
+            self.data_test = UniSTDataset(ds_test)
 
         elif stage == "predict":
             ds_pred = load_dataset(
@@ -98,7 +115,7 @@ class SemanticTypingDataModule(LightningDataModule):
                 data_files={"prediction": self.hparams.file_pred},
                 split="prediction",
             )
-            self.data_pred = SemanticTypingDataset(ds_pred, is_pred=True)
+            self.data_pred = UniSTDataset(ds_pred, is_pred=True)
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
@@ -134,4 +151,4 @@ class SemanticTypingDataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    _ = SemanticTypingDataModule()
+    _ = UniSTDataModule()

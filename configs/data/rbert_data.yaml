@@ -1,4 +1,4 @@
-_target_: src.data.klue_datamodule.KLUEDataModule
+_target_: src.data.rbert_datamodule.RBERTDataModule
 model_name: ${model.model_name}
 data_dir: ${paths.data_dir}
 file_train: train.csv

@@ -1,20 +1,23 @@
 from typing import Any, Dict, Tuple
 
 import torch
+import torch.nn as nn
 import wandb
 from lightning import LightningModule
 from lightning.pytorch.loggers.wandb import WandbLogger
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification import MulticlassAveragePrecision, MulticlassF1Score
-from transformers import AutoConfig, AutoModelForSequenceClassification
+from transformers import AutoConfig
 
 from ..data.components.labelsets import label2id
+from .components.rbert import RBERT
 
 
-class KLUEModule(LightningModule):
+class RBERTModule(LightningModule):
     def __init__(
         self,
-        model_name: str = "klue/bert-base",
+        model_name: str = "klue/roberta-base",
+        dropout_rate: float = 0.2,
         loss_fn: torch.nn.Module = None,
         optimizer: torch.optim.Optimizer = None,
         scheduler: torch.optim.lr_scheduler = None,
@@ -26,11 +29,13 @@ class KLUEModule(LightningModule):
         self.save_hyperparameters(logger=False)
         config = AutoConfig.from_pretrained(model_name)
         config.num_labels = 30
-        self.plm = AutoModelForSequenceClassification.from_pretrained(model_name, config=config)
+        config.dropout_rate = dropout_rate
+        self.net = RBERT(model_name, config=config)
 
-        # loss function
+        # loss functions
         self.criterion = loss_fn
 
+        # metrics
         self.train_micro_f1 = (
             MulticlassF1Score(num_classes=30, average="micro", ignore_index=0) * 100
         )
@@ -40,7 +45,6 @@ class KLUEModule(LightningModule):
         self.test_micro_f1 = (
             MulticlassF1Score(num_classes=30, average="micro", ignore_index=0) * 100
         )
-
         self.train_auprc = (
             MulticlassAveragePrecision(num_classes=30, average="macro", ignore_index=0) * 100
         )
@@ -60,8 +64,8 @@ class KLUEModule(LightningModule):
         self.val_micro_f1_best = MaxMetric()
         self.val_auprc_best = MaxMetric()
 
-    def forward(self, **inputs):
-        return self.plm(**inputs).logits
+    def forward(self, inputs):
+        return self.net(**inputs)
 
     def on_train_start(self) -> None:
         # by default lightning executes validation step sanity checks before training starts,
@@ -75,7 +79,7 @@ class KLUEModule(LightningModule):
     def model_step(self, batch):
         inputs = {key: val for key, val in batch.items() if key != "labels"}
         targets = batch["labels"]
-        logits = self.forward(**inputs)
+        logits = self.forward(inputs)
         loss = self.criterion(logits, targets)
         return loss, logits, targets
 
@@ -84,14 +88,17 @@ class KLUEModule(LightningModule):
 
         # update and log metrics
         self.train_loss(loss)
-        self.train_micro_f1(logits, targets)
-        self.train_auprc(logits, targets)
         self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
+        try:
+            self.train_micro_f1(logits, targets)
+            self.train_auprc(logits, targets)
+        except Exception as e:
+            print(f"Error occurred during train metric calculation: {e}")
+
         self.log(
             "train/micro_f1", self.train_micro_f1, on_step=False, on_epoch=True, prog_bar=True
         )
         self.log("train/auprc", self.train_auprc, on_step=False, on_epoch=True, prog_bar=True)
-
         # return loss or backpropagation will fail
         return loss
 
@@ -100,22 +107,33 @@ class KLUEModule(LightningModule):
 
         # update and log metrics
         self.val_loss(loss)
-        self.val_micro_f1(logits, targets)
-        self.val_auprc(logits, targets)
         self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        try:
+            self.val_micro_f1(logits, targets)
+            self.val_auprc(logits, targets)
+        except Exception as e:
+            print(f"Error occurred during validation metric calculation: {e}")
+
         self.log("val/micro_f1", self.val_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val/auprc", self.val_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
     def on_validation_epoch_end(self) -> None:
-        micro_f1 = self.val_micro_f1.compute()  # get current val micro f1
-        self.val_micro_f1_best(micro_f1)  # update best so far val micro f1
-        auprc = self.val_auprc.compute()  # get current val micro f1
-        self.val_auprc_best(auprc)  # update best so far val micro f1
+        try:
+            micro_f1 = self.val_micro_f1.compute()  # get current val micro f1
+            self.val_micro_f1_best(micro_f1)  # update best so far val micro f1
+            auprc = self.val_auprc.compute()  # get current val micro f1
+            self.val_auprc_best(auprc)  # update best so far val micro f1
 
-        # log `val_micro_f1_best` and 'val_auprc_best' as values through `.compute()` method, instead of as a metric object
-        # otherwise metrics would be reset by lightning after each epoch
+            # log `val_micro_f1_best` and 'val_auprc_best' as values through `.compute()` method, instead of as a metric object
+            # otherwise metrics would be reset by lightning after each epoch
+
+        except Exception as e:
+            print(f"Error occurred during validation epoch metric calculation: {e}")
         self.log(
-            "val/micro_f1_best", self.val_micro_f1_best.compute(), sync_dist=True, prog_bar=True
+            "val/micro_f1_best",
+            self.val_micro_f1_best.compute(),
+            sync_dist=True,
+            prog_bar=True,
         )
         self.log("val/auprc_best", self.val_auprc_best.compute(), sync_dist=True, prog_bar=True)
 
@@ -130,11 +148,14 @@ class KLUEModule(LightningModule):
             self.test_logits.append(logits)
             self.test_targets.append(targets)
 
-        # update and log metrics
         self.test_loss(loss)
-        self.test_micro_f1(logits, targets)
-        self.test_auprc(logits, targets)
         self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
+        try:
+            # update and log metrics
+            self.test_micro_f1(logits, targets)
+            self.test_auprc(logits, targets)
+        except Exception as e:
+            print(f"Error occurred during test metric calculation: {e}")
         self.log("test/micro_f1", self.test_micro_f1, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/auprc", self.test_auprc, on_step=False, on_epoch=True, prog_bar=True)
 
@@ -169,15 +190,14 @@ class KLUEModule(LightningModule):
             )
 
     def predict_step(self, batch, batch_idx):
-        return self.forward(**batch)
+        inputs = {key: val for key, val in batch.items()}
+        return self.forward(inputs)
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
         if self.hparams.scheduler is not None:
             scheduler = self.hparams.scheduler(
                 optimizer=optimizer,
-                num_warmup_steps=0.1 * self.total_steps,
-                num_training_steps=self.total_steps,
             )
             return {
                 "optimizer": optimizer,
@@ -197,4 +217,4 @@ class KLUEModule(LightningModule):
 
 
 if __name__ == "__main__":
-    _ = KLUEModule()
+    _ = RBERTModule()

@@ -8,15 +8,15 @@ defaults:
 model_checkpoint:
   dirpath: ${paths.output_dir}/checkpoints
   filename: "best_model"
-  monitor: "val/micro_f1"
+  monitor: "val/micro_f1_best"
   mode: "max"
   save_last: True
   auto_insert_metric_name: False
   enable_version_counter: False
 
 early_stopping:
-  monitor: "val/micro_f1"
-  patience: 3
+  monitor: "val/micro_f1_best"
+  patience: 5
   mode: "max"
 
 model_summary:

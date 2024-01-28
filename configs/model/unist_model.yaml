@@ -1,14 +1,13 @@
-_target_: src.models.klue_module.KLUEModule
+_target_: src.models.unist_module.UniSTModule
 
-model_name: "klue/bert-base"
+model_name: "klue/roberta-base"
 
-loss_fn:
-  _target_: src.models.components.focal_loss.FocalLoss
+margin: 0.1
 
 optimizer:
   _target_: torch.optim.AdamW
   _partial_: true
-  lr: 3e-5
+  lr: 5e-6
 
 scheduler:
   _target_: transformers.get_linear_schedule_with_warmup
