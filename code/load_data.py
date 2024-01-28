@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import torch
 
+from sklearn.model_selection import train_test_split
 
 class RE_Dataset(torch.utils.data.Dataset):
   """ Dataset 구성을 위한 class."""
@@ -18,47 +19,56 @@ class RE_Dataset(torch.utils.data.Dataset):
   def __len__(self):
     return len(self.labels)
 
-def preprocessing_dataset(dataset):
-  """ 처음 불러온 csv 파일을 원하는 형태의 DataFrame으로 변경 시켜줍니다."""
+def preprocessing_dataset_with_sentence(dataset : pd.DataFrame):
   subject_entity = []
   object_entity = []
-  for i,j in zip(dataset['subject_entity'], dataset['object_entity']):
-    i = i[1:-1].split(',')[0].split(':')[1]
-    j = j[1:-1].split(',')[0].split(':')[1]
+  sentence = []
+  for S_WORD,S_TYPE,O_WORD,O_TYPE,SEN in zip(dataset['subj_word'], dataset['subj_type'], dataset['obj_word'], dataset['obj_type'], dataset['sentence']): 
+    
+    S_TEMP = ' '.join(['@', '*', '['+S_TYPE+']', '*', S_WORD, '@'])
+    subject_entity.append(S_TEMP)
+  
+    O_TEMP = ' '.join(['#', '^', '['+O_TYPE+']', '^', O_WORD, '#'])
+    object_entity.append(O_TEMP)
 
-    subject_entity.append(i)
-    object_entity.append(j)
-  out_dataset = pd.DataFrame({'id':dataset['id'], 'sentence':dataset['sentence'],'subject_entity':subject_entity,'object_entity':object_entity,'label':dataset['label'],})
+    sentence.append(SEN.replace(S_WORD, S_TEMP).replace(O_WORD, O_TEMP))
+
+  out_dataset = pd.DataFrame({'id':dataset['id'], 'sentence':sentence, 'subject_entity':subject_entity,'object_entity':object_entity,'label':dataset['label'],})
   return out_dataset
 
-def load_demo_data(sentence, subject_entity, object_entity):
-  """ csv 파일을 경로에 맡게 불러 옵니다. """
-  demo_dataset = pd.DataFrame({'id':0, 'sentence':sentence,'subject_entity':subject_entity,'object_entity':object_entity,'label':100}, index=[0])
-  
-  return demo_dataset
-
-
-def load_data(dataset_dir):
-  """ csv 파일을 경로에 맡게 불러 옵니다. """
+def load_data(dataset_dir : str):
   pd_dataset = pd.read_csv(dataset_dir)
-  dataset = preprocessing_dataset(pd_dataset)
-  
+
+  # 모든 값이 일치한 data를 삭제
+  pd_dataset.drop_duplicates(['subj_word','sentence','obj_word','subj_start','obj_start','label'],keep='first')
+  dataset = preprocessing_dataset_with_sentence(pd_dataset)
+
   return dataset
 
-def tokenized_dataset(dataset, tokenizer):
-  """ tokenizer에 따라 sentence를 tokenizing 합니다."""
+
+def load_data_test(dataset_dir : str):
+  pd_dataset = pd.read_csv(dataset_dir)
+  dataset = preprocessing_dataset_with_sentence(pd_dataset)
+
+  return dataset
+
+
+def tokenized_dataset(dataset : pd.DataFrame, tokenizer):
   concat_entity = []
   for e01, e02 in zip(dataset['subject_entity'], dataset['object_entity']):
-    temp = ''
-    temp = e01 + '[SEP]' + e02
+    temp = e01 + ' 과 ' + e02 + '의 관계'
     concat_entity.append(temp)
-  tokenized_sentences = tokenizer(
+  
+  tokenized_sentence = tokenizer(
       concat_entity,
       list(dataset['sentence']),
       return_tensors="pt",
       padding=True,
       truncation=True,
-      max_length=256,
+      max_length=160,
       add_special_tokens=True,
-      )
-  return tokenized_sentences
+      return_token_type_ids = True
+  )
+  
+  return tokenized_sentence
+
